@@ -1,5 +1,31 @@
 <!-- DFJ Journal Form Component -->
 <template>
+    <template lwc:if={isSelectionModalOpen}>
+        <section role="dialog" tabindex="-1" aria-modal="true" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <h2 class="slds-modal__title">Choose DocFab Journal</h2>
+                </header>
+                <div class="slds-modal__content slds-p-around_medium">
+                    <template for:each={selectionOptions} for:item="option">
+                        <div key={option.url} class="slds-m-bottom_small">
+                            <lightning-button
+                                data-url={option.url}
+                                label={option.label}
+                                onclick={handleSelectOption}
+                                variant="brand"
+                                class="slds-m-bottom_xx-small"
+                            ></lightning-button>
+                        </div>
+                    </template>
+                </div>
+                <footer class="slds-modal__footer slds-grid slds-grid_align-end">
+                    <lightning-button variant="neutral" label="Cancel" onclick={handleSelectionModalClose}></lightning-button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open" role="presentation"></div>
+    </template>
     <lightning-card>
         <div class="slds-p-vertical_small slds-p-horizontal_large">
             <div style="font-size: large">

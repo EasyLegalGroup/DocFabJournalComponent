@@ -4,8 +4,17 @@
 
 public with sharing class DFJ_JournalForm {
 
-	@AuraEnabled
-	public static journalWholeData getJournalData_Apex(String JournalId, String objectName, String leadId,Boolean journlaFormClicked) {
+    @AuraEnabled
+    public static journalWholeData getJournalData_Apex(
+        String JournalId,
+        String objectName,
+        String contextRecordId,
+        Boolean journlaFormClicked,
+        Decimal componentRecordModelId,
+        String componentFormUuid,
+        String componentFormTypeName,
+        Boolean allowMultipleDocFabJournals
+    ) {
 
 		if(objectName == null || objectName.trim() == ''){
 			objectName = 'Journal__c';
@@ -161,6 +170,7 @@ public with sharing class DFJ_JournalForm {
             			Retskreds__c,
 						SMS_Flow__c,
 						Is_Using_Docfab__c,
+						DocFab_Record_Model_ID__c,
 						Type__c
 				FROM Journal__c
 				WHERE Id = :JournalId
@@ -179,13 +189,24 @@ public with sharing class DFJ_JournalForm {
 				// Description : Checking for the is using docfab field so, for new journal docfab form could open.
 				// Start
 				System.debug('journlaFormClicked >>>'+journlaFormClicked + 'Is docfab URL'+journalsList[0].Is_Using_Docfab__c);
-				if(journlaFormClicked && journalsList[0].Is_Using_Docfab__c){
+				if(journlaFormClicked){
 					System.debug('Inside If-----');
-						String docFabUrl = CheckMarketUnitToShowForm_Apex(journalsList);
+						String resolvedMarketUnit = resolveMarketUnit(journalsList[0], objectName, contextRecordId);
+						String docFabUrl = CheckMarketUnitToShowForm_Apex(journalsList, componentRecordModelId, componentFormUuid, componentFormTypeName, allowMultipleDocFabJournals, resolvedMarketUnit);
 						System.debug('docFabUrl If-----'+docFabUrl);
 						if (!String.isBlank(docFabUrl)) {
 							journalReturnInstance.docFabUrl = docFabUrl;
 							System.debug('journalReturnInstance.docFabUrl---'+journalReturnInstance.docFabUrl);
+							if(objectName == 'Lead' && allowMultipleDocFabJournals){
+								journalReturnInstance.docFabOptions = buildDocFabOptionsForLead(contextRecordId);
+								if(journalReturnInstance.docFabOptions != null && journalReturnInstance.docFabOptions.size() > 1){
+									journalReturnInstance.requiresSelection = true;
+									// If multiple options, do not force docFabUrl to auto-open
+									journalReturnInstance.docFabUrl = null;
+								}else if(journalReturnInstance.docFabOptions != null && journalReturnInstance.docFabOptions.size() == 1){
+                                    journalReturnInstance.docFabUrl = journalReturnInstance.docFabOptions[0].url;
+                                }
+							}
 						} else {
 							DFJ_ErrorLogController.addErrorLogs(JournalId, 'Checking docFabUrl is not blank', '', 'Warning', 'In getJournalData_Apex docFabUrl is null or empty', '', '');
 						}
@@ -279,9 +300,9 @@ public with sharing class DFJ_JournalForm {
 					setOfProductId.add(ol.Product2Id);
 				}
 
-			}else if(objectName == 'Lead'){
-				List<LeadProducts__c> leadProductsList = new List<LeadProducts__c>();
-				leadProductsList = [SELECT Id,Name,Product_Id__c From LeadProducts__c Where Lead__c =: leadId WITH SECURITY_ENFORCED LIMIT 10000];
+				}else if(objectName == 'Lead'){
+					List<LeadProducts__c> leadProductsList = new List<LeadProducts__c>();
+					leadProductsList = [SELECT Id,Name,Product_Id__c From LeadProducts__c Where Lead__c =: contextRecordId WITH SECURITY_ENFORCED LIMIT 10000];
 
 				for(LeadProducts__c lp :leadProductsList){
 					setOfProductId.add(lp.Product_Id__c);
@@ -378,7 +399,15 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 		// @AuraEnabled public String formUuid;
 		@AuraEnabled public String docFabUrl;
 		@AuraEnabled public String errorMessage;
+		@AuraEnabled public List<DocFabOption> docFabOptions;
+		@AuraEnabled public Boolean requiresSelection;
 		// End
+	}
+
+	public class DocFabOption{
+		@AuraEnabled public String label;
+		@AuraEnabled public String url;
+		@AuraEnabled public Decimal recordModelId;
 	}
 
 	public class configWrapper {
@@ -767,85 +796,62 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 
 	// Changes for ticket - DIN-169 : Open record content in form.
 	// Start
-	// Description : checkMarketUnitToShowForm_Apex will return Wrapper which contains record-uuid and form_uuid.
+	// Description : checkMarketUnitToShowForm_Apex will return docFab URL using new consolidated metadata.
 	@AuraEnabled
-	public static String CheckMarketUnitToShowForm_Apex(List<Journal__c> journalData){
+	public static String CheckMarketUnitToShowForm_Apex(List<Journal__c> journalData, Decimal componentRecordModelId, String componentFormUuid, String componentFormTypeName, Boolean allowMultipleDocFabJournals, String resolvedMarketUnit){
 		try {
 			if(journalData.isEmpty()){
 				return null;
 			}
-			String urlOrErrorToReturn = '';
-			List<Record_form_configuration__mdt> recordFormConfigurationInstance = new List<Record_form_configuration__mdt>();
-			List<DFJ_JournalDocfabFieldConfigurator__mdt> docfabFieldConfigurationInstance = new List<DFJ_JournalDocfabFieldConfigurator__mdt>();
-			Boolean updateJournalLookupField;
-			Boolean salesforceUserExistInMetadata = false;
-			// Changes for ticket DIN-287 : Form and record model selector
-			// Description: Added journaltpye in parameter
-			// Start
+
 			Doc_Fabricator_Setting__c docFabSetting = Doc_Fabricator_Setting__c.getOrgDefaults();
-			if (String.isBlank(docFabSetting.URL__c)) {
-				return 'Error request URL not found.';
+			if (docFabSetting == null || String.isBlank(docFabSetting.URL__c)) {
+				return 'DocFab base URL is missing in Doc_Fabricator_Setting__c.';
 			}
-			recordFormConfigurationInstance = DF_DocFabricator_Utility.GetRecordFormConfigurationMetadataRecord_Apex(journalData[0].Market_Unit__c,journalData[0].Id,journalData[0].Type__c);
-			
-			//Changes Start TCS-86
-			//docfabFieldConfigurationInstance = getDFJournalDocfabConfigurationMetadataRecord_Apex(journalData[0].Market_Unit__c,journalData[0].Id,journalData[0].Type__c);
-			// End
 
-			if(!recordFormConfigurationInstance.isEmpty()){
-
-					String externalRecordUuid = journalData[0].External_record_uuid__c;
-					// if(!String.isBlank(externalRecordUuid)){
-					//         updateJournalLookupField = updateLookupFieldOfJournal(journalData,externalRecordUuid,recordFormConfigurationInstance);
-					if(String.isNotBlank(recordFormConfigurationInstance[0].Salesforce_User__c)){
-						String salesforceUserId = recordFormConfigurationInstance[0].Salesforce_User__c;	
-						String currentUserId = UserInfo.getUserId();	
-						salesforceUserExistInMetadata = !String.isBlank(salesforceUserId) && salesforceUserId.contains(currentUserId) ? true : false;			
-					}
-					// }
-					if(String.isBlank(externalRecordUuid)){
-						// Call DF_DocFabricator_Utility apexclass API method to authorize user and then POST Api request to create record.
-
-						// changes for ticket DIN-175 : Create docfab record with prefilled data.
-						// Description : passing the journal record instead of only the id. So changing the second parameter to journalData[0]
-						// Start
-
-					//	System.debug('Inside 22-->'+DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(recordFormConfigurationInstance[0].Default_Record_Model_Id__c,journalData));
-					//	System.debug('Inside 33-->'+DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(recordFormConfigurationInstance[0].Record_modal_id__c,journalData));
-						String recordUuidOrError = salesforceUserExistInMetadata ? DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(recordFormConfigurationInstance[0].Default_Record_Model_Id__c,journalData): DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(recordFormConfigurationInstance[0].Record_modal_id__c,journalData);
-						// End
-							if(!String.isBlank(recordUuidOrError)){
-								if (!recordUuidOrError.contains('Current user with') && !recordUuidOrError.contains('Error')) {
-									urlOrErrorToReturn = docFabSetting.URL__c+'public/form/'+recordUuidOrError;
-									//Update journal external record uuid
-										journalData[0].External_record_uuid__c = recordUuidOrError;
-										journalData[0].DocFab_Record_Model_ID__c = salesforceUserExistInMetadata ? recordFormConfigurationInstance[0].Default_Record_Model_Id__c : recordFormConfigurationInstance[0].Record_modal_id__c;
-										update journalData;
-										updateJournalLookupField = updateLookupFieldOfJournal(journalData,recordUuidOrError,recordFormConfigurationInstance[0].Docfab_Journal_Object__c);
-										//End
-
-								}else if (recordUuidOrError.contains('Current user with') || recordUuidOrError.contains('Error')) {
-									// return error
-									urlOrErrorToReturn = recordUuidOrError;
-								}
-							}else{
-								urlOrErrorToReturn = 'Can not create record in docfabricator please contact your admin to create record.';
-							}
-					}else{
-						if (!String.isBlank(externalRecordUuid)){
-							urlOrErrorToReturn = docFabSetting.URL__c+'public/form/'+externalRecordUuid;
-						}else {
-							urlOrErrorToReturn = 'Can not open docfabricator form.';
-							DFJ_ErrorLogController.addErrorLogs(journalData[0].Id, 'Checking the record_form_configuration metadata field Form_uuid__c is not empty', '', 'Warning', 'recordFormConfigurationInstance Form_uuid__c is blank.', '', '');
-						}
-					}
-			}else{
-				urlOrErrorToReturn = 'No form configuration found for '+ journalData[0].Type__c +' and '+ journalData[0].Market_Unit__c +' unable to open journal.';
-				DFJ_ErrorLogController.addErrorLogs(journalData[0].Id, 'Checking the record_form_configuration metadata has record for particular market unit', '', 'Warning', 'recordFormConfigurationInstance list is null.', '', '');
+			DF_DocFabricator_Utility.DocFabSelectionResult selection = DF_DocFabricator_Utility.selectConfiguration(resolvedMarketUnit, componentFormTypeName, componentRecordModelId, componentFormUuid, UserInfo.getUserId());
+			if(selection == null){
+				return 'No DocFab configuration found.';
 			}
-			return urlOrErrorToReturn;
+			if(!String.isBlank(selection.permissionError)){
+				return selection.permissionError;
+			}
+			if(!String.isBlank(selection.errorMessage)){
+				return selection.errorMessage;
+			}
+			if(selection.recordModelId == null){
+				return 'No record model resolved for market unit '+ resolvedMarketUnit +'.';
+			}
+
+				String externalRecordUuid = journalData[0].External_record_uuid__c;
+				String existingRecordModelId = journalData[0].DocFab_Record_Model_ID__c;
+				Boolean modelMatchesExisting = selection.recordModelId != null && !String.isBlank(existingRecordModelId) && existingRecordModelId == String.valueOf(selection.recordModelId);
+
+			// Reuse existing when possible (Journal is single-doc rule; Lead multiple flag can force create).
+			if(!String.isBlank(externalRecordUuid)){
+				if(modelMatchesExisting || !allowMultipleDocFabJournals){
+					return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, externalRecordUuid, selection.formUuid);
+				}
+			}
+
+			String recordUuidOrError = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(String.valueOf(selection.recordModelId.longValue()), journalData, selection.fieldConfigurationJson);
+			if(String.isBlank(recordUuidOrError)){
+				return 'Can not create record in DocFabricator. Please contact your admin.';
+			}
+			if (recordUuidOrError.contains('Current user with') || recordUuidOrError.contains('Error')) {
+				return recordUuidOrError;
+			}
+
+				journalData[0].External_record_uuid__c = recordUuidOrError;
+				journalData[0].DocFab_Record_Model_ID__c = selection.recordModelId != null ? String.valueOf(selection.recordModelId) : null;
+			update journalData;
+			if(!String.isBlank(selection.docfabJournalObject)){
+				updateLookupFieldOfJournal(journalData,recordUuidOrError,selection.docfabJournalObject);
+			}
+
+			return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, recordUuidOrError, selection.formUuid);
 		} catch (Exception ex) {
-			DFJ_ErrorLogController.addErrorLogs(journalData[0].Id, 'Checking which form to render according to market unit', ex.getMessage(), 'Error', 'checkMarketUnitToShowForm_Apex apex class method.', ex.getStackTraceString(), String.valueOf(ex.getLineNumber()));
+			DFJ_ErrorLogController.addErrorLogs(journalData[0].Id, 'Selecting DocFab configuration', ex.getMessage(), 'Error', 'checkMarketUnitToShowForm_Apex apex class method.', ex.getStackTraceString(), String.valueOf(ex.getLineNumber()));
 			return null;
 		}
 	}
@@ -870,6 +876,66 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 		return false;
 	}
 	//End
+
+	private static String resolveMarketUnit(Journal__c journalRecord, String objectName, String contextRecordId){
+		if(journalRecord != null && !String.isBlank(journalRecord.Market_Unit__c)){
+			return journalRecord.Market_Unit__c;
+		}
+		if(objectName == 'Lead' && !String.isBlank(contextRecordId)){
+			List<Lead> leads = [SELECT Market_Unit__c FROM Lead WHERE Id = :contextRecordId LIMIT 1];
+			if(!leads.isEmpty() && !String.isBlank(leads[0].Market_Unit__c)){
+				return leads[0].Market_Unit__c;
+			}
+		}
+		if(objectName == 'Opportunity' && !String.isBlank(contextRecordId)){
+			List<Opportunity> opps = [SELECT Market_Unit__c FROM Opportunity WHERE Id = :contextRecordId LIMIT 1];
+			if(!opps.isEmpty() && !String.isBlank(opps[0].Market_Unit__c)){
+				return opps[0].Market_Unit__c;
+			}
+		}
+		List<User> users = [SELECT Market_Unit__c FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
+		if(!users.isEmpty() && !String.isBlank(users[0].Market_Unit__c)){
+			return users[0].Market_Unit__c;
+		}
+		return null;
+	}
+
+		private static List<DocFabOption> buildDocFabOptionsForLead(String leadId){
+			List<DocFabOption> options = new List<DocFabOption>();
+			if(String.isBlank(leadId)){
+			return options;
+		}
+		Doc_Fabricator_Setting__c docFabSetting = Doc_Fabricator_Setting__c.getOrgDefaults();
+			if(docFabSetting == null || String.isBlank(docFabSetting.URL__c)){
+				return options;
+			}
+			List<Journal__c> leadJournals = [SELECT Id, Name, External_record_uuid__c, DocFab_Record_Model_ID__c, Market_Unit__c FROM Journal__c WHERE Lead__c = :leadId AND External_record_uuid__c != null WITH SECURITY_ENFORCED LIMIT 10000];
+			for(Journal__c j : leadJournals){
+				if(String.isBlank(j.DocFab_Record_Model_ID__c)){
+					continue;
+				}
+				Decimal recordModel;
+				try{
+					recordModel = Decimal.valueOf(j.DocFab_Record_Model_ID__c);
+				}catch(Exception e){
+					continue;
+				}
+				DF_DocFabricator_Utility.DocFabSelectionResult sel = DF_DocFabricator_Utility.selectConfiguration(j.Market_Unit__c, null, recordModel, null, UserInfo.getUserId());
+				if(sel != null && !String.isBlank(sel.permissionError)){
+					continue;
+				}
+				String url = DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, j.External_record_uuid__c, sel != null ? sel.formUuid : null);
+				if(String.isBlank(url)){
+					continue;
+				}
+				DocFabOption opt = new DocFabOption();
+				opt.label = 'Model ' + String.valueOf(recordModel) + ' - ' + j.Name;
+				opt.url = url;
+				opt.recordModelId = recordModel;
+				options.add(opt);
+			}
+			return options;
+		}
     //Changes DIN-383 : Improve Journal History
 	//Start
     // Description :Creation the Old and New record of Journal Hstroy Object

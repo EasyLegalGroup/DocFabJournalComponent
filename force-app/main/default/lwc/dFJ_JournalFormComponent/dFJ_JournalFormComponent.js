@@ -10,6 +10,10 @@ export default class DFJ_JournalFormComponent extends LightningElement {
     @api recordId;
     @api objectApiName;
 
+    @api recordModelId;
+    @api formUuid;
+    @api formTypeUniqueName;
+    @api allowMultipleDocFabJournals = false;
     @api openBehavior = 'modal'; // modal | newTab | inline
     isJournalFormClicked = true;
     docFabFormUrl;
@@ -19,6 +23,8 @@ export default class DFJ_JournalFormComponent extends LightningElement {
     relatedLeadId;
     isFetchingForm = false;
     isIframeLoading = false;
+    selectionOptions = [];
+    isSelectionModalOpen = false;
 
     get isFormLoading() {
         return this.isFetchingForm || this.isIframeLoading;
@@ -113,12 +119,31 @@ export default class DFJ_JournalFormComponent extends LightningElement {
 
             const response = await getJournalData_Apex({
                 JournalId: journalId,
-                leadId,
+                contextRecordId: leadId,
                 objectName: this.objectApiName || 'Journal__c',
                 journlaFormClicked: this.isJournalFormClicked,
+                componentRecordModelId: this.recordModelId,
+                componentFormUuid: this.formUuid,
+                componentFormTypeName: this.formTypeUniqueName,
+                allowMultipleDocFabJournals: this.allowMultipleDocFabJournals,
             });
 
-            const docFabUrl = response && response.docFabUrl;
+            const options = (response && response.docFabOptions) || [];
+            const requiresSelection = response && response.requiresSelection;
+            let docFabUrl = response && response.docFabUrl;
+
+            if (!docFabUrl && options.length === 1) {
+                docFabUrl = options[0].url;
+            }
+
+            if (requiresSelection && options.length > 1) {
+                this.selectionOptions = options;
+                this.isSelectionModalOpen = true;
+                this.isInitialized = true;
+                this.isIframeLoading = false;
+                return;
+            }
+
             if (!docFabUrl) {
                 this.showToast('Error opening journal', 'DocFab URL not available for this record.', 'error');
                 this.isShowFormInModal = false;
@@ -131,6 +156,8 @@ export default class DFJ_JournalFormComponent extends LightningElement {
                 return;
             }
 
+            this.selectionOptions = [];
+            this.isSelectionModalOpen = false;
             this.docFabFormUrl = docFabUrl;
             this.isInitialized = true;
             this.isIframeLoading = this.openBehavior !== 'newTab';
@@ -168,6 +195,24 @@ export default class DFJ_JournalFormComponent extends LightningElement {
     handleCloseModal() {
         this.isShowFormInModal = false;
         this.isIframeLoading = false;
+    }
+
+    handleSelectionModalClose() {
+        this.isSelectionModalOpen = false;
+        this.selectionOptions = [];
+    }
+
+    handleSelectOption(event) {
+        const url = event.target.dataset.url;
+        if (!url) {
+            return;
+        }
+        this.docFabFormUrl = url;
+        this.isSelectionModalOpen = false;
+        this.selectionOptions = [];
+        this.isInitialized = true;
+        this.isIframeLoading = this.openBehavior !== 'newTab';
+        this.toggleVisibility(true);
     }
 
     handleIframeLoad() {

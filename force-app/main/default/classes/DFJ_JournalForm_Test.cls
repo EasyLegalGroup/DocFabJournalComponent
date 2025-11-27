@@ -40,9 +40,9 @@ public with sharing class DFJ_JournalForm_Test {
         insert AssestInstance;
 
         Test.startTest();
-        DFJ_JournalForm.getJournalData_Apex(null,null,null,false);
-        DFJ_JournalForm.getJournalData_Apex(journalInstance.Id,null,null,false);
-        DFJ_JournalForm.getJournalData_Apex(acc.Id,null,null,false);
+        DFJ_JournalForm.getJournalData_Apex(null,null,null,false,null,null,null,false);
+        DFJ_JournalForm.getJournalData_Apex(journalInstance.Id,null,null,false,null,null,null,false);
+        DFJ_JournalForm.getJournalData_Apex(acc.Id,null,null,false,null,null,null,false);
 
 
         Person__c personpNewInstance = new Person__c();
@@ -251,14 +251,14 @@ public with sharing class DFJ_JournalForm_Test {
         // Changes for ticket - DIN-169 : Open record content in form.
 	    // Start
         // Description : Testing getJournalData_Apex when market unit is non DFJ_DK and has external_record_uuid.
-        DFJ_JournalForm.journalWholeData testTwo = DFJ_JournalForm.getJournalData_Apex(journalInstance[1].Id, 'Journal__c', '',true);
+        DFJ_JournalForm.journalWholeData testTwo = DFJ_JournalForm.getJournalData_Apex(journalInstance[1].Id, 'Journal__c', '',true, null, null, null, false);
         // End
         // Changes for ticket - DIN-169 : Open record content in form.
 	    // Start
         // Description : Testing getJournalData_Apex when market unit is non DFJ_DK and not external_record_uuid present.
-        DFJ_JournalForm.journalWholeData testOne = DFJ_JournalForm.getJournalData_Apex(journalInstance[0].Id, 'Journal__c', '',true);
-        DFJ_JournalForm.journalWholeData testThree = DFJ_JournalForm.getJournalData_Apex(journalInstance[0].Id, 'Journal__c', '',false);
-        DFJ_JournalForm.journalWholeData testFour = DFJ_JournalForm.getJournalData_Apex(journalInstance[1].Id, 'Journal__c', '',false);
+        DFJ_JournalForm.journalWholeData testOne = DFJ_JournalForm.getJournalData_Apex(journalInstance[0].Id, 'Journal__c', '',true, null, null, null, false);
+        DFJ_JournalForm.journalWholeData testThree = DFJ_JournalForm.getJournalData_Apex(journalInstance[0].Id, 'Journal__c', '',false, null, null, null, false);
+        DFJ_JournalForm.journalWholeData testFour = DFJ_JournalForm.getJournalData_Apex(journalInstance[1].Id, 'Journal__c', '',false, null, null, null, false);
         // End
         Test.stopTest();
         // System.assertEquals('https://admin.docfabricator.com/public/form/TestExtRecId/'+md.Form_uuid__c+'', testOne.docFabUrl);
@@ -282,7 +282,7 @@ public with sharing class DFJ_JournalForm_Test {
         // Changes for ticket - DIN-169 : Open record content in form.
 	    // Start
         // Description : Testing getJournalData_Apex when market unit is non DFJ_DK and not external_record_uuid present.
-        DFJ_JournalForm.journalWholeData testOne = DFJ_JournalForm.getJournalData_Apex(journalInstance[1].Id, 'Journal__c', '',true);
+        DFJ_JournalForm.journalWholeData testOne = DFJ_JournalForm.getJournalData_Apex(journalInstance[1].Id, 'Journal__c', '',true, null, null, null, false);
         //DFJ_JournalForm.journalWholeData testTwo = DFJ_JournalForm.getJournalData_Apex(journalInstance[1].Id, 'Journal__c', '',true); 
         // End
         Test.stopTest();
@@ -373,9 +373,30 @@ public with sharing class DFJ_JournalForm_Test {
          List<Order> orderList= DFJ_JournalForm.ordersAssociatedWithAccount(listOfAccount[0].Id);
          test.stopTest();
          System.assertEquals(orderList.Size(), 1);
-     }
+    }
     
     
 	//End
+
+    @isTest
+    private static void leadMultiSelection_ReturnsOptions(){
+        insert new Doc_Fabricator_Setting__c(SetupOwnerId = UserInfo.getOrganizationId(), URL__c = 'https://example.com/');
+
+        Lead lead = new Lead(LastName='Test Lead MS', Company='Test Co', Market_Unit__c='DFJ_DK', Status='Open - Not Contacted');
+        insert lead;
+
+        Journal__c j1 = new Journal__c(Lead__c=lead.Id, Market_Unit__c='DFJ_DK', External_record_uuid__c='uuid1', DocFab_Record_Model_ID__c='160');
+        Journal__c j2 = new Journal__c(Lead__c=lead.Id, Market_Unit__c='DFJ_DK', External_record_uuid__c='uuid2', DocFab_Record_Model_ID__c='161');
+        insert new List<Journal__c>{j1, j2};
+
+        Test.startTest();
+        DFJ_JournalForm.journalWholeData result = DFJ_JournalForm.getJournalData_Apex(j1.Id, 'Lead', lead.Id, true, null, null, null, true);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Result should not be null');
+        System.assertEquals(true, result.requiresSelection, 'Should require selection when multiple DocFab options exist');
+        System.assertEquals(2, result.docFabOptions.size(), 'Should surface two DocFab options for the lead');
+        System.assertEquals(null, result.docFabUrl, 'DocFab URL should be null when requiring selection');
+    }
 
 }
