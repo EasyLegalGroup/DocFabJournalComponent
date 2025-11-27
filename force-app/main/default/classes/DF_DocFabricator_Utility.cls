@@ -27,14 +27,23 @@ public without sharing class DF_DocFabricator_Utility {
 
         List<DocFab_Model_Selection__mdt> configs;
         String filterName = String.isNotBlank(formTypeName) ? formTypeName : null;
-        configs = [
-            SELECT Id, MasterLabel, Market_Unit__c, Default_Record_Model__c, Default_Form_UUID__c,
-                   Custom_Permission__c, Is_Default__c, Field_Configuration__c, Default_Field_Configuration__c, Docfab_Journal_Object__c
-              FROM DocFab_Model_Selection__mdt
-             WHERE Market_Unit__c = :marketUnit
-             AND (:filterName = null OR MasterLabel = :filterName)
-             ORDER BY Is_Default__c DESC, CreatedDate DESC
-        ];
+        if(filterName != null){
+            configs = [
+                SELECT Id, MasterLabel, Market_Unit__c, Default_Record_Model__c, Default_Form_UUID__c,
+                       Custom_Permission__c, Is_Default__c, Field_Configuration__c, Default_Field_Configuration__c, Docfab_Journal_Object__c
+                  FROM DocFab_Model_Selection__mdt
+                 WHERE Market_Unit__c = :marketUnit AND MasterLabel = :filterName
+                 ORDER BY Is_Default__c DESC, DeveloperName DESC
+            ];
+        }else{
+            configs = [
+                SELECT Id, MasterLabel, Market_Unit__c, Default_Record_Model__c, Default_Form_UUID__c,
+                       Custom_Permission__c, Is_Default__c, Field_Configuration__c, Default_Field_Configuration__c, Docfab_Journal_Object__c
+                  FROM DocFab_Model_Selection__mdt
+                 WHERE Market_Unit__c = :marketUnit
+                 ORDER BY Is_Default__c DESC, DeveloperName DESC
+            ];
+        }
 
         if(configs.isEmpty()){
             result.errorMessage = 'No DocFab configuration found for market unit '+marketUnit+ (String.isNotBlank(formTypeName) ? ' and form type '+formTypeName : '') +'.';
@@ -45,14 +54,24 @@ public without sharing class DF_DocFabricator_Utility {
 
         // Check overrides
         DocFab_Model_Override__mdt selectedOverride = null;
-        List<DocFab_Model_Override__mdt> overrides = [
-            SELECT Id, MasterLabel, Market_Unit__c, User_Override__c, Record_Model_Override__c, Form_UUID_Override__c,
-                   Custom_Permission__c, Field_Configuration__c, Default_Field_Configuration__c
-              FROM DocFab_Model_Override__mdt
-             WHERE Market_Unit__c = :marketUnit
-             AND (:filterName = null OR MasterLabel = :filterName)
-             ORDER BY CreatedDate DESC
-        ];
+        List<DocFab_Model_Override__mdt> overrides;
+        if(filterName != null){
+            overrides = [
+                SELECT Id, MasterLabel, Market_Unit__c, User_Override__c, Record_Model_Override__c, Form_UUID_Override__c,
+                       Custom_Permission__c, Field_Configuration__c, Default_Field_Configuration__c
+                  FROM DocFab_Model_Override__mdt
+                 WHERE Market_Unit__c = :marketUnit AND MasterLabel = :filterName
+                 ORDER BY DeveloperName DESC
+            ];
+        }else{
+            overrides = [
+                SELECT Id, MasterLabel, Market_Unit__c, User_Override__c, Record_Model_Override__c, Form_UUID_Override__c,
+                       Custom_Permission__c, Field_Configuration__c, Default_Field_Configuration__c
+                  FROM DocFab_Model_Override__mdt
+                 WHERE Market_Unit__c = :marketUnit
+                 ORDER BY DeveloperName DESC
+            ];
+        }
         for(DocFab_Model_Override__mdt ov : overrides){
             if(userIsInCsv(ov.User_Override__c, currentUserId)){
                 if(!String.isBlank(ov.Custom_Permission__c) && !FeatureManagement.checkPermission(ov.Custom_Permission__c)){
