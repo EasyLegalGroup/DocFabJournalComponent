@@ -1,0 +1,54 @@
+<!-- DFJ Journal Form Component -->
+<template>
+    <lightning-card>
+        <div class="slds-p-vertical_small slds-p-horizontal_large">
+            <div style="font-size: large">
+                <lightning-button
+                        label={buttonLabel}
+                        onclick={handleOpenJournalFormButtonClick}
+                        variant="brand"
+                        icon-name="utility:edit_form"
+                        stretch="true"
+                >
+                </lightning-button>
+            </div>
+        </div>
+
+        <template lwc:if={isShowInline}>
+            <div class="slds-p-horizontal_large slds-p-bottom_medium">
+                <iframe src={docFabFormUrl}
+                        width="100%"
+                        height="700"
+                        sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals">
+                </iframe>
+            </div>
+        </template>
+    </lightning-card>
+
+    <template lwc:if={isShowFormInModal}>
+        <div>
+
+            <section role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="modal-heading-01"
+                     class="slds-modal slds-fade-in-open" >
+
+                <div class="slds-modal__container">
+
+                    <lightning-button-icon class="slds-button slds-button_icon slds-modal__close"
+                                           size="large"
+                                           icon-name="utility:close" onclick={handleCloseModal}
+                                           variant="bare-inverse"></lightning-button-icon>
+
+                    <div class="slds-modal__content slds-scrollable_none">
+                        <iframe src={docFabFormUrl}
+                                width="100%"
+                                height="700"
+                                sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals">
+                        </iframe>
+                    </div>
+
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open" role="presentation"></div>
+        </div>
+    </template>
+</template>

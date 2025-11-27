@@ -1,0 +1,39 @@
+.slds-modal__container {
+    width: 90% !important;
+    max-width: 90% !important;
+}
+
+iframe {
+    border: none;
+}
+
+.journal-button-wrapper {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.journal-button-wrapper lightning-button {
+    width: 100%;
+}
+
+.iframe-container {
+    position: relative;
+    min-height: 200px;
+}
+
+.iframe-loader {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.9);
+    z-index: 1;
+}
+
+.loader-text {
+    font-weight: 600;
+}

@@ -1,0 +1,150 @@
+import { api, LightningElement, wire } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import { getRecord, getFieldValue } from 'lightning/uiRecordApi';
+import LEAD_FIELD from '@salesforce/schema/Journal__c.Lead__c';
+
+import getJournalData_Apex from '@salesforce/apex/DFJ_JournalForm.getJournalData_Apex';
+import journalAssociatedWithLead from '@salesforce/apex/DFJ_JournalForm.journalAssociatedWithLead';
+
+export default class DFJ_JournalFormComponent extends LightningElement {
+    @api recordId;
+    @api objectApiName;
+
+    @api openBehavior = 'modal'; // modal | newTab | inline
+    isJournalFormClicked = true;
+    docFabFormUrl;
+    isShowFormInModal = false;
+    isShowInline = false;
+    isInitialized = false;
+    relatedLeadId;
+
+    get journalRecordId() {
+        return this.objectApiName === 'Journal__c' ? this.recordId : null;
+    }
+
+    @wire(getRecord, {
+        recordId: '$journalRecordId',
+        fields: [LEAD_FIELD],
+    })
+    fieldsData({ data }) {
+        if (data) {
+            this.relatedLeadId = getFieldValue(data, LEAD_FIELD);
+        }
+    }
+
+    async handleOpenJournalFormButtonClick() {
+        if (!this.isInitialized) {
+            await this.handleGetJournalData(true);
+        } else {
+            this.toggleVisibility();
+        }
+    }
+
+    get buttonLabel() {
+        if (this.openBehavior === 'newTab') {
+            return 'Open Journal Form';
+        }
+        const isShowing = this.openBehavior === 'inline' ? this.isShowInline : this.isShowFormInModal;
+        if (!this.isInitialized) {
+            return 'Open Journal Form';
+        }
+        return isShowing ? 'Hide Journal Form' : 'Show Journal Form';
+    }
+
+    async handleGetJournalData(forceShow = false) {
+        try {
+            let journalId = this.recordId;
+            let leadId = this.relatedLeadId;
+
+            const isLeadContext = this.objectApiName === 'Lead';
+            if (isLeadContext) {
+                leadId = this.recordId;
+                const journals = await journalAssociatedWithLead({ recordId: this.recordId });
+                if (!journals || !journals.length) {
+                    this.showToast('Error opening journal', 'No journal found or created for this lead.', 'error');
+                    return;
+                }
+                journalId = journals[0].Id;
+            }
+
+            const response = await getJournalData_Apex({
+                JournalId: journalId,
+                leadId,
+                objectName: this.objectApiName || 'Journal__c',
+                journlaFormClicked: this.isJournalFormClicked,
+            });
+
+            const docFabUrl = response && response.docFabUrl;
+            if (!docFabUrl) {
+                this.showToast('Error opening journal', 'DocFab URL not available for this record.', 'error');
+                this.isShowFormInModal = false;
+                return;
+            }
+
+            if (this.isDocFabError(docFabUrl)) {
+                this.showToast('Error opening journal', docFabUrl, 'error');
+                this.isShowFormInModal = false;
+                return;
+            }
+
+            this.docFabFormUrl = docFabUrl;
+            this.isInitialized = true;
+            this.toggleVisibility(forceShow || this.openBehavior === 'newTab');
+        } catch (error) {
+            const message = (error && error.body && error.body.message) || error.message || 'Unexpected error';
+            this.showToast('Error opening journal', message, 'error');
+            this.isShowFormInModal = false;
+        }
+    }
+
+    toggleVisibility(forceShow = false) {
+        if (!this.docFabFormUrl) {
+            return;
+        }
+        if (this.openBehavior === 'newTab') {
+            window.open(this.docFabFormUrl, '_blank');
+            this.isShowFormInModal = false;
+            this.isShowInline = false;
+        } else if (this.openBehavior === 'inline') {
+            if (forceShow) {
+                this.isShowInline = true;
+            } else {
+                this.isShowInline = !this.isShowInline;
+            }
+            this.isShowFormInModal = false;
+        } else {
+            if (forceShow) {
+                this.isShowFormInModal = true;
+            } else {
+                this.isShowFormInModal = !this.isShowFormInModal;
+            }
+            this.isShowInline = false;
+        }
+    }
+
+    handleCloseModal() {
+        this.isShowFormInModal = false;
+    }
+
+    isDocFabError(url) {
+        const errorSnippets = [
+            'Current user with',
+            'No form configuration found',
+            'Can not open',
+            'Can not create',
+            'Error',
+        ];
+        return errorSnippets.some((snippet) => url.includes(snippet));
+    }
+
+    showToast(title, message, variant = 'info') {
+        this.dispatchEvent(
+            new ShowToastEvent({
+                title,
+                message,
+                variant,
+                mode: 'sticky',
+            })
+        );
+    }
+}
