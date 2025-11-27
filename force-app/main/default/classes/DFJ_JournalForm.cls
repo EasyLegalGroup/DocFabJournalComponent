@@ -192,13 +192,31 @@ public with sharing class DFJ_JournalForm {
 				if(journlaFormClicked){
 					System.debug('Inside If-----');
 						String resolvedMarketUnit = resolveMarketUnit(journalsList[0], objectName, contextRecordId);
-						String docFabUrl = CheckMarketUnitToShowForm_Apex(journalsList, componentRecordModelId, componentFormUuid, componentFormTypeName, allowMultipleDocFabJournals, resolvedMarketUnit);
+						DF_DocFabricator_Utility.DocFabSelectionResult selection = DF_DocFabricator_Utility.selectConfiguration(resolvedMarketUnit, componentFormTypeName, componentRecordModelId, componentFormUuid, UserInfo.getUserId());
+						if(selection == null){
+							journalReturnInstance.docFabUrl = 'No DocFab configuration found.';
+							return journalReturnInstance;
+						}
+						if(!String.isBlank(selection.permissionError)){
+							journalReturnInstance.docFabUrl = selection.permissionError;
+							return journalReturnInstance;
+						}
+						if(!String.isBlank(selection.errorMessage)){
+							journalReturnInstance.docFabUrl = selection.errorMessage;
+							return journalReturnInstance;
+						}
+						if(selection.recordModelId == null){
+							journalReturnInstance.docFabUrl = 'No record model resolved for market unit '+ resolvedMarketUnit +'.';
+							return journalReturnInstance;
+						}
+
+						String docFabUrl = CheckMarketUnitToShowForm_Apex(journalsList, selection, allowMultipleDocFabJournals, resolvedMarketUnit, objectName, contextRecordId);
 						System.debug('docFabUrl If-----'+docFabUrl);
 						if (!String.isBlank(docFabUrl)) {
 							journalReturnInstance.docFabUrl = docFabUrl;
 							System.debug('journalReturnInstance.docFabUrl---'+journalReturnInstance.docFabUrl);
 							if(objectName == 'Lead' && allowMultipleDocFabJournals){
-								journalReturnInstance.docFabOptions = buildDocFabOptionsForLead(contextRecordId);
+								journalReturnInstance.docFabOptions = buildDocFabOptionsForLead(contextRecordId, selection.recordModelId);
 								if(journalReturnInstance.docFabOptions != null && journalReturnInstance.docFabOptions.size() > 1){
 									journalReturnInstance.requiresSelection = true;
 									// If multiple options, do not force docFabUrl to auto-open
@@ -798,7 +816,14 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 	// Start
 	// Description : checkMarketUnitToShowForm_Apex will return docFab URL using new consolidated metadata.
 	@AuraEnabled
-	public static String CheckMarketUnitToShowForm_Apex(List<Journal__c> journalData, Decimal componentRecordModelId, String componentFormUuid, String componentFormTypeName, Boolean allowMultipleDocFabJournals, String resolvedMarketUnit){
+	public static String CheckMarketUnitToShowForm_Apex(
+		List<Journal__c> journalData,
+		DF_DocFabricator_Utility.DocFabSelectionResult selection,
+		Boolean allowMultipleDocFabJournals,
+		String resolvedMarketUnit,
+		String objectName,
+		String contextRecordId
+	){
 		try {
 			if(journalData.isEmpty()){
 				return null;
@@ -809,23 +834,14 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 				return 'DocFab base URL is missing in Doc_Fabricator_Setting__c.';
 			}
 
-			DF_DocFabricator_Utility.DocFabSelectionResult selection = DF_DocFabricator_Utility.selectConfiguration(resolvedMarketUnit, componentFormTypeName, componentRecordModelId, componentFormUuid, UserInfo.getUserId());
-			if(selection == null){
-				return 'No DocFab configuration found.';
-			}
-			if(!String.isBlank(selection.permissionError)){
-				return selection.permissionError;
-			}
-			if(!String.isBlank(selection.errorMessage)){
-				return selection.errorMessage;
-			}
-			if(selection.recordModelId == null){
-				return 'No record model resolved for market unit '+ resolvedMarketUnit +'.';
+			String targetModelId = selection.recordModelId != null ? String.valueOf(selection.recordModelId) : null;
+			if(objectName == 'Lead' && allowMultipleDocFabJournals){
+				return handleLeadDocFabFlow(selection, docFabSetting, resolvedMarketUnit, contextRecordId, targetModelId);
 			}
 
-				String externalRecordUuid = journalData[0].External_record_uuid__c;
-				String existingRecordModelId = journalData[0].DocFab_Record_Model_ID__c;
-				Boolean modelMatchesExisting = selection.recordModelId != null && !String.isBlank(existingRecordModelId) && existingRecordModelId == String.valueOf(selection.recordModelId);
+			String externalRecordUuid = journalData[0].External_record_uuid__c;
+			String existingRecordModelId = journalData[0].DocFab_Record_Model_ID__c;
+			Boolean modelMatchesExisting = selection.recordModelId != null && !String.isBlank(existingRecordModelId) && existingRecordModelId == targetModelId;
 
 			// Reuse existing when possible (Journal is single-doc rule; Lead multiple flag can force create).
 			if(!String.isBlank(externalRecordUuid)){
@@ -842,8 +858,8 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 				return recordUuidOrError;
 			}
 
-				journalData[0].External_record_uuid__c = recordUuidOrError;
-				journalData[0].DocFab_Record_Model_ID__c = selection.recordModelId != null ? String.valueOf(selection.recordModelId) : null;
+			journalData[0].External_record_uuid__c = recordUuidOrError;
+			journalData[0].DocFab_Record_Model_ID__c = selection.recordModelId != null ? String.valueOf(selection.recordModelId) : null;
 			update journalData;
 			if(!String.isBlank(selection.docfabJournalObject)){
 				updateLookupFieldOfJournal(journalData,recordUuidOrError,selection.docfabJournalObject);
@@ -856,6 +872,72 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 		}
 	}
 	// End
+
+	private static String handleLeadDocFabFlow(
+		DF_DocFabricator_Utility.DocFabSelectionResult selection,
+		Doc_Fabricator_Setting__c docFabSetting,
+		String resolvedMarketUnit,
+		String leadId,
+		String targetModelId
+	){
+		List<Journal__c> leadJournals = new List<Journal__c>();
+		if(!String.isBlank(leadId)){
+			leadJournals = [
+				SELECT Id, Name, External_record_uuid__c, DocFab_Record_Model_ID__c, Market_Unit__c, CreatedDate
+				  FROM Journal__c
+				 WHERE Lead__c = :leadId
+				 WITH SECURITY_ENFORCED
+				 ORDER BY CreatedDate DESC
+				 LIMIT 10000
+			];
+		}
+
+		if(leadJournals.isEmpty()){
+			return null;
+		}
+
+		List<Journal__c> matchingDocFab = new List<Journal__c>();
+		for(Journal__c j : leadJournals){
+			if(String.isBlank(j.External_record_uuid__c)){
+				continue;
+			}
+			if(!String.isBlank(targetModelId) && targetModelId == j.DocFab_Record_Model_ID__c){
+				matchingDocFab.add(j);
+			}
+		}
+
+		if(!matchingDocFab.isEmpty()){
+			// Journals are ordered DESC by CreatedDate; take the newest match.
+			return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, matchingDocFab[0].External_record_uuid__c, selection.formUuid);
+		}
+
+		// No matching DocFab journal exists; create a new Journal__c and new DocFab record.
+		Journal__c newJournal = new Journal__c();
+		newJournal.Lead__c = leadId;
+		if(!String.isBlank(resolvedMarketUnit)){
+			newJournal.Market_Unit__c = resolvedMarketUnit;
+		}
+		insert newJournal;
+
+		List<Journal__c> toUpdate = new List<Journal__c>{ newJournal };
+		String recordUuidOrError = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(String.valueOf(selection.recordModelId.longValue()), toUpdate, selection.fieldConfigurationJson);
+		if(String.isBlank(recordUuidOrError)){
+			return 'Can not create record in DocFabricator. Please contact your admin.';
+		}
+		if (recordUuidOrError.contains('Current user with') || recordUuidOrError.contains('Error')) {
+			return recordUuidOrError;
+		}
+
+		toUpdate[0].External_record_uuid__c = recordUuidOrError;
+		toUpdate[0].DocFab_Record_Model_ID__c = targetModelId;
+		update toUpdate;
+		if(!String.isBlank(selection.docfabJournalObject)){
+			updateLookupFieldOfJournal(toUpdate, recordUuidOrError, selection.docfabJournalObject);
+		}
+
+		return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, recordUuidOrError, selection.formUuid);
+	}
+
 	//Changes DIN-371 : Populating Related Journal Lookup Field
 	//Start
     // Description : checkMarketUnitToShowForm_Apex will return Boolean for Updating Journal LookUp Field
@@ -900,7 +982,7 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 		return null;
 	}
 
-		private static List<DocFabOption> buildDocFabOptionsForLead(String leadId){
+		private static List<DocFabOption> buildDocFabOptionsForLead(String leadId, Decimal targetRecordModelId){
 			List<DocFabOption> options = new List<DocFabOption>();
 			if(String.isBlank(leadId)){
 			return options;
@@ -918,6 +1000,9 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 				try{
 					recordModel = Decimal.valueOf(j.DocFab_Record_Model_ID__c);
 				}catch(Exception e){
+					continue;
+				}
+				if(targetRecordModelId != null && targetRecordModelId != recordModel){
 					continue;
 				}
 				DF_DocFabricator_Utility.DocFabSelectionResult sel = DF_DocFabricator_Utility.selectConfiguration(j.Market_Unit__c, null, recordModel, null, UserInfo.getUserId());
