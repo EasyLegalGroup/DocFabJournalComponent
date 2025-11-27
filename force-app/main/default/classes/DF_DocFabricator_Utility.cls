@@ -26,26 +26,15 @@ public without sharing class DF_DocFabricator_Utility {
         }
 
         List<DocFab_Model_Selection__mdt> configs;
-        if(!String.isBlank(formTypeName)){
-            configs = [
-                SELECT Id, Form_Type__c, Market_Unit__c, Unique_Name__c, Default_Record_Model__c, Default_Form_UUID__c,
-                       User_Override__c, Record_Model_Override__c, Form_UUID_Override__c, Custom_Permission__c,
-                       Is_Default__c, Field_Configuration__c, Default_Field_Configuration__c, Docfab_Journal_Object__c
-                  FROM DocFab_Model_Selection__mdt
-                 WHERE Market_Unit__c = :marketUnit AND Form_Type__c = :formTypeName
-                 ORDER BY Is_Default__c DESC, Unique_Name__c ASC
-            ];
-        }else{
-            configs = [
-                SELECT Id, Form_Type__c, Market_Unit__c, Unique_Name__c, Default_Record_Model__c, Default_Form_UUID__c,
-                       User_Override__c, Record_Model_Override__c, Form_UUID_Override__c, Custom_Permission__c,
-                       Is_Default__c, Field_Configuration__c, Default_Field_Configuration__c, Docfab_Journal_Object__c
-                  FROM DocFab_Model_Selection__mdt
-                 WHERE Market_Unit__c = :marketUnit
-                 ORDER BY Is_Default__c DESC, Unique_Name__c ASC
-                 LIMIT 1
-            ];
-        }
+        String filterName = String.isNotBlank(formTypeName) ? formTypeName : null;
+        configs = [
+            SELECT Id, MasterLabel, Market_Unit__c, Default_Record_Model__c, Default_Form_UUID__c,
+                   Custom_Permission__c, Is_Default__c, Field_Configuration__c, Default_Field_Configuration__c, Docfab_Journal_Object__c
+              FROM DocFab_Model_Selection__mdt
+             WHERE Market_Unit__c = :marketUnit
+             AND (:filterName = null OR MasterLabel = :filterName)
+             ORDER BY Is_Default__c DESC, CreatedDate DESC
+        ];
 
         if(configs.isEmpty()){
             result.errorMessage = 'No DocFab configuration found for market unit '+marketUnit+ (String.isNotBlank(formTypeName) ? ' and form type '+formTypeName : '') +'.';
@@ -53,40 +42,56 @@ public without sharing class DF_DocFabricator_Utility {
         }
 
         DocFab_Model_Selection__mdt cfg = configs[0];
-        if(!String.isBlank(cfg.Custom_Permission__c) && !FeatureManagement.checkPermission(cfg.Custom_Permission__c)){
-            result.permissionError = 'You do not have access to record model ' + String.valueOf(cfg.Record_Model_Override__c != null ? cfg.Record_Model_Override__c : cfg.Default_Record_Model__c) + '.';
-            return result;
-        }
 
-        Boolean userOverride = userIsInCsv(cfg.User_Override__c, currentUserId);
+        // Check overrides
+        DocFab_Model_Override__mdt selectedOverride = null;
+        List<DocFab_Model_Override__mdt> overrides = [
+            SELECT Id, MasterLabel, Market_Unit__c, User_Override__c, Record_Model_Override__c, Form_UUID_Override__c,
+                   Custom_Permission__c, Field_Configuration__c, Default_Field_Configuration__c
+              FROM DocFab_Model_Override__mdt
+             WHERE Market_Unit__c = :marketUnit
+             AND (:filterName = null OR MasterLabel = :filterName)
+             ORDER BY CreatedDate DESC
+        ];
+        for(DocFab_Model_Override__mdt ov : overrides){
+            if(userIsInCsv(ov.User_Override__c, currentUserId)){
+                if(!String.isBlank(ov.Custom_Permission__c) && !FeatureManagement.checkPermission(ov.Custom_Permission__c)){
+                    result.permissionError = 'You do not have access to record model ' + String.valueOf(ov.Record_Model_Override__c) + '.';
+                    return result;
+                }
+                selectedOverride = ov;
+                break;
+            }
+        }
 
         Decimal recordModelId = componentRecordModelId;
-        if(recordModelId == null){
-            if(userOverride && cfg.Record_Model_Override__c != null){
-                recordModelId = cfg.Record_Model_Override__c;
-            }else{
+        String formUuid = componentFormUuid;
+
+        if(selectedOverride != null){
+            if(recordModelId == null){
+                recordModelId = selectedOverride.Record_Model_Override__c;
+            }
+            if(String.isBlank(formUuid)){
+                formUuid = selectedOverride.Form_UUID_Override__c;
+            }
+            result.fieldConfigurationJson = !String.isBlank(selectedOverride.Field_Configuration__c) ? selectedOverride.Field_Configuration__c : selectedOverride.Default_Field_Configuration__c;
+        }else{
+            if(!String.isBlank(cfg.Custom_Permission__c) && !FeatureManagement.checkPermission(cfg.Custom_Permission__c)){
+                result.permissionError = 'You do not have access to record model ' + String.valueOf(cfg.Default_Record_Model__c) + '.';
+                return result;
+            }
+            if(recordModelId == null){
                 recordModelId = cfg.Default_Record_Model__c;
             }
-        }
-
-        String formUuid = componentFormUuid;
-        if(String.isBlank(formUuid)){
-            if(userOverride && !String.isBlank(cfg.Form_UUID_Override__c)){
-                formUuid = cfg.Form_UUID_Override__c;
-            }else{
+            if(String.isBlank(formUuid)){
                 formUuid = cfg.Default_Form_UUID__c;
             }
+            result.fieldConfigurationJson = cfg.Field_Configuration__c;
         }
 
         result.recordModelId = recordModelId;
         result.formUuid = formUuid;
         result.docfabJournalObject = cfg.Docfab_Journal_Object__c;
-
-        if(userOverride && !String.isBlank(cfg.Default_Field_Configuration__c)){
-            result.fieldConfigurationJson = cfg.Default_Field_Configuration__c;
-        }else{
-            result.fieldConfigurationJson = cfg.Field_Configuration__c;
-        }
 
         if(result.recordModelId == null){
             result.errorMessage = 'No record model resolved for market unit '+marketUnit+'.';

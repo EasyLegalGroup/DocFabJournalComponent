@@ -47,6 +47,8 @@
         <members>DFJ_ObjectRecordModelId__mdt.*</members>
         <members>Journal_Address_Configration__mdt.*</members>
         <members>Market_Unit_Time_Zone__mdt.*</members>
+        <members>DocFab_Model_Override__mdt.*</members>
+        <members>DocFab_Model_Selection__mdt.*</members>
         <name>CustomMetadata</name>
     </types>
     <types>

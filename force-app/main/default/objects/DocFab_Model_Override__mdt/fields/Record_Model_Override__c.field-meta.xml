@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Record_Model_Override__c</fullName>
-    <description>Record model id to use when the running user is in the override list.</description>
+    <description>Record model id to use when the running user matches this override.</description>
     <externalId>false</externalId>
     <label>Record Model Override</label>
     <precision>18</precision>
