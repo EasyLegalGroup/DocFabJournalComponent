@@ -191,10 +191,8 @@ public with sharing class DFJ_JournalForm {
 		];
 
 		if (!journalsList.isEmpty()) {
-				// Changes for ticket - DIN-169 : Open record content in form.
-				// Start
 				// Description : Checking if market unit value is not DFJ_DK and not blank then
-				// Calling "checkMarketUnitToShowForm_Apex" method to check market unit according to metadata "Record_form_configuration__mdt".
+				// Uses DocFab_Record_Model__mdt and DocFab_Market_Default__mdt for configuration lookup.
 				// Else getting all the data related to journal record as previously.External_record_uuid__c
 				
 				// Changes for ticket - DIN-251 : Enabled DocFab forms for all market units.
@@ -893,9 +891,6 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 			journalData[0].External_record_uuid__c = recordUuidOrError;
 			journalData[0].DocFab_Record_Model_ID__c = selection.recordModelId != null ? String.valueOf(selection.recordModelId) : null;
 			update journalData;
-			if(!String.isBlank(selection.docfabJournalObject)){
-				updateLookupFieldOfJournal(journalData,recordUuidOrError,selection.docfabJournalObject);
-			}
 
 			return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, recordUuidOrError, selection.formUuid);
 		} catch (Exception ex) {
@@ -964,10 +959,6 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 		newJournal.External_record_uuid__c = recordUuidOrError;
 		newJournal.DocFab_Record_Model_ID__c = targetModelId;
 		insert newJournal;
-		List<Journal__c> toUpdate = new List<Journal__c>{ newJournal };
-		if(!String.isBlank(selection.docfabJournalObject)){
-			updateLookupFieldOfJournal(toUpdate, recordUuidOrError, selection.docfabJournalObject);
-		}
 
 		return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, recordUuidOrError, selection.formUuid);
 	}

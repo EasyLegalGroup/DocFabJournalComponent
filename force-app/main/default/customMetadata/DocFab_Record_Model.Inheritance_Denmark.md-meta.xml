@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomMetadata xmlns="http://soap.sforce.com/2006/04/metadata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <label>Inheritance Denmark</label>
+    <protected>false</protected>
+    <values>
+        <field>Record_Model_Id__c</field>
+        <value xsi:type="xsd:string">160</value>
+    </values>
+    <values>
+        <field>Custom_Permission__c</field>
+        <value xsi:type="xsd:string">DocFab_Inheritance_Denmark</value>
+    </values>
+    <values>
+        <field>Description__c</field>
+        <value xsi:type="xsd:string">Denmark inheritance journal (DFJ_DK market unit)</value>
+    </values>
+    <values>
+        <field>Default_Form_UUID__c</field>
+        <value xsi:nil="true"/>
+    </values>
+    <values>
+        <field>Field_Configuration__c</field>
+        <value xsi:type="xsd:string">{"Name":"journal_name","Lead__r.FirstName":"p1_fornavn","Lead__r.LastName":"p1_efternavn","Lead__r.Email":"p1_email","Lead__r.Phone":"p1_telefon","Lead__r.Person2_First_Name__c":"p2_fornavn","Lead__r.Person2_Last_Name__c":"p2_efternavn","Lead__r.Email2__c":"p2_email","Lead__r.Phone2__c":"p2_telefon"}</value>
+    </values>
+</CustomMetadata>

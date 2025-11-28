@@ -13,9 +13,9 @@
     <targetConfigs>
         <targetConfig targets="lightning__RecordPage,lightning__AppPage,lightning__HomePage,lightning__UtilityBar">
             <property name="openBehavior" type="String" default="modal" label="Open behavior" description="Choose modal (default), newTab, or inline to render DocFab." />
-            <property name="recordModelId" type="String" label="Record Model Id" description="Optional DocFab record model id to force (highest priority)." />
-            <property name="formUuid" type="String" label="Form UUID" description="Optional DocFab form UUID to force." />
-            <property name="formTypeUniqueName" type="String" label="Form Type (Unique Name)" description="Optional Form Type key to resolve cmdt configuration." />
+            <property name="recordModelId" type="String" label="Record Model Id" description="Optional DocFab record model id to force (highest priority, overrides CMDT lookup)." />
+            <property name="formUuid" type="String" label="Form UUID" description="Optional DocFab form UUID to force (overrides record model default)." />
+            <property name="formTypeUniqueName" type="String" label="[DEPRECATED] Form Type" description="DEPRECATED - No longer used. Will be removed in future version." />
             <property name="allowMultipleDocFabJournals" type="Boolean" default="false" label="Allow Multiple DocFabricator Journals (Lead only)" description="If true, allow creating/opening different record models per Lead." />
         </targetConfig>
     </targetConfigs>

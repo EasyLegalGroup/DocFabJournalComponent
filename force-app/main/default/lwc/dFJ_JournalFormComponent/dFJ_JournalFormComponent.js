@@ -12,7 +12,7 @@ export default class DFJ_JournalFormComponent extends LightningElement {
 
     @api recordModelId;
     @api formUuid;
-    @api formTypeUniqueName;
+    @api formTypeUniqueName; // DEPRECATED - kept for backwards compatibility with existing page layouts
     @api allowMultipleDocFabJournals = false;
     @api openBehavior = 'modal'; // modal | newTab | inline
     isJournalFormClicked = true;
@@ -124,7 +124,7 @@ export default class DFJ_JournalFormComponent extends LightningElement {
                 journlaFormClicked: this.isJournalFormClicked,
                 componentRecordModelId: this.recordModelId,
                 componentFormUuid: this.formUuid,
-                componentFormTypeName: this.formTypeUniqueName,
+                componentFormTypeName: null,
                 allowMultipleDocFabJournals: this.allowMultipleDocFabJournals,
             });
 

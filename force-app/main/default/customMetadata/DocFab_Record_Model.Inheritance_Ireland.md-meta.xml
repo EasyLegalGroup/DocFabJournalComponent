@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomMetadata xmlns="http://soap.sforce.com/2006/04/metadata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <label>Inheritance Ireland</label>
+    <protected>false</protected>
+    <values>
+        <field>Record_Model_Id__c</field>
+        <value xsi:type="xsd:string">218</value>
+    </values>
+    <values>
+        <field>Custom_Permission__c</field>
+        <value xsi:type="xsd:string">DocFab_Inheritance_Ireland</value>
+    </values>
+    <values>
+        <field>Description__c</field>
+        <value xsi:type="xsd:string">Ireland inheritance journal (Ireland market unit)</value>
+    </values>
+    <values>
+        <field>Default_Form_UUID__c</field>
+        <value xsi:nil="true"/>
+    </values>
+    <values>
+        <field>Field_Configuration__c</field>
+        <value xsi:nil="true"/>
+    </values>
+</CustomMetadata>

@@ -245,7 +245,7 @@ public with sharing class DFJ_JournalForm_Test {
        // List<Journal__c> journalInstance = [SELECT Id,Market_Unit__c,External_record_uuid__c FROM Journal__c];
        
 
-		Record_form_configuration__mdt md = Record_form_configuration__mdt.getInstance('Din_Familie_Jurist_Admin_of_estate');
+		DocFab_Record_Model__mdt md = DocFab_Record_Model__mdt.getInstance('Inheritance_Denmark');
         Test.startTest();
         Test.setMock(HttpCalloutMock.class, new DF_MockTestUtility_Apex());
         // Changes for ticket - DIN-169 : Open record content in form.
@@ -276,7 +276,7 @@ public with sharing class DFJ_JournalForm_Test {
         APIKeyInstance.URL__c = 'https://admin.docfabricator.com/';
         insert APIKeyInstance;
        // List<Journal__c> journalInstance = [SELECT Id,Market_Unit__c,External_record_uuid__c FROM Journal__c];
-		Record_form_configuration__mdt md = Record_form_configuration__mdt.getInstance('Din_Familie_Jurist_Inheritance');
+		DocFab_Record_Model__mdt md = DocFab_Record_Model__mdt.getInstance('Inheritance_Sweden');
         Test.startTest();
         Test.setMock(HttpCalloutMock.class, new DF_MockTestUtility_Apex());
         // Changes for ticket - DIN-169 : Open record content in form.

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Market_Unit__c</fullName>
+    <description>The Market Unit code (e.g., DFJ_DK, FA_SE, Ireland). Must be unique - one default per market.</description>
+    <externalId>true</externalId>
+    <fieldManageability>DeveloperControlled</fieldManageability>
+    <label>Market Unit</label>
+    <length>50</length>
+    <required>true</required>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>

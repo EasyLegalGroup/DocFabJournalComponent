@@ -15,98 +15,117 @@ public without sharing class DF_DocFabricator_Utility {
         public String errorMessage;
         public String permissionError;
         public String fieldConfigurationJson;
-        public String docfabJournalObject;
     }
 
+    /**
+     * New selectConfiguration using 3-CMDT architecture:
+     * - DocFab_Record_Model__mdt: Master definitions (Record Model ID + Field Config)
+     * - DocFab_Market_Default__mdt: Default Record Model per Market Unit
+     * - DocFab_User_Override__mdt: Per-user overrides
+     * 
+     * Priority for Record Model ID:
+     * 1. componentRecordModelId (from LWC page layout)
+     * 2. DocFab_User_Override__mdt (if user matches)
+     * 3. DocFab_Market_Default__mdt (market default)
+     * 
+     * Priority for Form UUID:
+     * 1. componentFormUuid (from LWC page layout)
+     * 2. DocFab_User_Override__mdt.Form_UUID_Override__c (if user matches)
+     * 3. DocFab_Record_Model__mdt.Default_Form_UUID__c
+     * 4. null (DocFab uses its default)
+     * 
+     * Field Configuration is ALWAYS looked up from DocFab_Record_Model__mdt
+     */
     public static DocFabSelectionResult selectConfiguration(String marketUnit, String formTypeName, Decimal componentRecordModelId, String componentFormUuid, Id currentUserId){
         DocFabSelectionResult result = new DocFabSelectionResult();
-        // Prio 1: page-level overrides (componentRecordModelId/FormUuid)
+        String resolvedRecordModelId = null;
+        String userOverrideFormUuid = null;
+        
+        // STEP 1: Determine Record Model ID
+        
+        // Priority 1: Page-level override from LWC component
         if(componentRecordModelId != null){
-            result.recordModelId = componentRecordModelId;
-            result.formUuid = componentFormUuid;
-            return result;
+            resolvedRecordModelId = String.valueOf(componentRecordModelId.longValue());
         }
-
-        if(String.isBlank(marketUnit)){
-            result.errorMessage = 'No market unit available.';
-            return result;
-        }
-
-        String filterName = String.isNotBlank(formTypeName) ? formTypeName : null;
-
-        // Prio 2: user-specific overrides
-        List<DocFab_Model_Override__mdt> overrides;
-        if(filterName != null){
-            overrides = [
-                SELECT Id, MasterLabel, Market_Unit__c, User_Override__c, Record_Model_Override__c, Form_UUID_Override__c,
-                       Custom_Permission__c, Field_Configuration__c, Default_Field_Configuration__c
-                  FROM DocFab_Model_Override__mdt
-                 WHERE Market_Unit__c = :marketUnit AND MasterLabel = :filterName
-                 ORDER BY DeveloperName DESC
+        
+        // Priority 2: User-specific override
+        if(resolvedRecordModelId == null && currentUserId != null){
+            List<DocFab_User_Override__mdt> userOverrides = [
+                SELECT Id, User_Ids__c, Form_UUID_Override__c,
+                       Override_Record_Model__r.Record_Model_Id__c
+                  FROM DocFab_User_Override__mdt
             ];
-        }else{
-            overrides = [
-                SELECT Id, MasterLabel, Market_Unit__c, User_Override__c, Record_Model_Override__c, Form_UUID_Override__c,
-                       Custom_Permission__c, Field_Configuration__c, Default_Field_Configuration__c
-                  FROM DocFab_Model_Override__mdt
-                 WHERE Market_Unit__c = :marketUnit
-                 ORDER BY DeveloperName DESC
-            ];
-        }
-        for(DocFab_Model_Override__mdt ov : overrides){
-            if(userIsInCsv(ov.User_Override__c, currentUserId)){
-                if(!String.isBlank(ov.Custom_Permission__c) && !FeatureManagement.checkPermission(ov.Custom_Permission__c)){
-                    result.permissionError = 'You do not have access to record model ' + String.valueOf(ov.Record_Model_Override__c) + '.';
-                    return result;
+            for(DocFab_User_Override__mdt uo : userOverrides){
+                if(userIsInCsv(uo.User_Ids__c, currentUserId)){
+                    resolvedRecordModelId = uo.Override_Record_Model__r.Record_Model_Id__c;
+                    userOverrideFormUuid = uo.Form_UUID_Override__c;
+                    break;
                 }
-                result.recordModelId = ov.Record_Model_Override__c;
-                result.formUuid = String.isBlank(componentFormUuid) ? ov.Form_UUID_Override__c : componentFormUuid;
-                result.fieldConfigurationJson = !String.isBlank(ov.Field_Configuration__c) ? ov.Field_Configuration__c : ov.Default_Field_Configuration__c;
-                return result;
             }
         }
-
-        // Prio 3: default selection per market unit (Is_Default__c = true)
-        List<DocFab_Model_Selection__mdt> configs;
-        if(filterName != null){
-            configs = [
-                SELECT Id, MasterLabel, Market_Unit__c, Default_Record_Model__c, Default_Form_UUID__c,
-                       Custom_Permission__c, Is_Default__c, Field_Configuration__c, Default_Field_Configuration__c, Docfab_Journal_Object__c
-                  FROM DocFab_Model_Selection__mdt
-                 WHERE Market_Unit__c = :marketUnit AND MasterLabel = :filterName AND Is_Default__c = true
-                 ORDER BY DeveloperName DESC
+        
+        // Priority 3: Market Default
+        if(resolvedRecordModelId == null){
+            if(String.isBlank(marketUnit)){
+                result.errorMessage = 'No market unit available.';
+                return result;
+            }
+            
+            List<DocFab_Market_Default__mdt> marketDefaults = [
+                SELECT Id, Market_Unit__c,
+                       Default_Record_Model__r.Record_Model_Id__c
+                  FROM DocFab_Market_Default__mdt
+                 WHERE Market_Unit__c = :marketUnit
+                 LIMIT 1
             ];
-        }else{
-            configs = [
-                SELECT Id, MasterLabel, Market_Unit__c, Default_Record_Model__c, Default_Form_UUID__c,
-                       Custom_Permission__c, Is_Default__c, Field_Configuration__c, Default_Field_Configuration__c, Docfab_Journal_Object__c
-                  FROM DocFab_Model_Selection__mdt
-                 WHERE Market_Unit__c = :marketUnit AND Is_Default__c = true
-                 ORDER BY DeveloperName DESC
-            ];
+            
+            if(marketDefaults.isEmpty()){
+                result.errorMessage = 'No DocFab configuration found for market unit ' + marketUnit + '.';
+                return result;
+            }
+            
+            resolvedRecordModelId = marketDefaults[0].Default_Record_Model__r.Record_Model_Id__c;
         }
-
-        if(configs.isEmpty()){
-            result.errorMessage = 'No DocFab configuration found for market unit '+marketUnit+ (String.isNotBlank(formTypeName) ? ' and form type '+formTypeName : '') +'.';
+        
+        // STEP 2: Look up Record Model definition (ALWAYS happens)
+        if(String.isBlank(resolvedRecordModelId)){
+            result.errorMessage = 'Could not resolve a Record Model ID.';
             return result;
         }
-
-        DocFab_Model_Selection__mdt cfg = configs[0];
-
-        if(!String.isBlank(cfg.Custom_Permission__c) && !FeatureManagement.checkPermission(cfg.Custom_Permission__c)){
-            result.permissionError = 'You do not have access to record model ' + String.valueOf(cfg.Default_Record_Model__c) + '.';
+        
+        List<DocFab_Record_Model__mdt> recordModels = [
+            SELECT Id, Record_Model_Id__c, Field_Configuration__c, Default_Form_UUID__c, Custom_Permission__c, Description__c
+              FROM DocFab_Record_Model__mdt
+             WHERE Record_Model_Id__c = :resolvedRecordModelId
+             LIMIT 1
+        ];
+        
+        if(recordModels.isEmpty()){
+            result.errorMessage = 'Record Model ID ' + resolvedRecordModelId + ' is not configured in DocFab_Record_Model__mdt.';
             return result;
         }
-
-        result.recordModelId = cfg.Default_Record_Model__c;
-        result.formUuid = String.isBlank(componentFormUuid) ? cfg.Default_Form_UUID__c : componentFormUuid;
-        result.fieldConfigurationJson = cfg.Field_Configuration__c;
-        result.docfabJournalObject = cfg.Docfab_Journal_Object__c;
-
-        if(result.recordModelId == null){
-            result.errorMessage = 'No record model resolved for market unit '+marketUnit+'.';
+        
+        DocFab_Record_Model__mdt recordModel = recordModels[0];
+        
+        // Check Custom Permission
+        if(!String.isBlank(recordModel.Custom_Permission__c) && !FeatureManagement.checkPermission(recordModel.Custom_Permission__c)){
+            result.permissionError = 'You do not have access to record model ' + resolvedRecordModelId + '.';
+            return result;
         }
-
+        
+        // STEP 3: Populate result
+        result.recordModelId = Decimal.valueOf(resolvedRecordModelId);
+        result.fieldConfigurationJson = recordModel.Field_Configuration__c;
+        
+        // Form UUID priority: componentFormUuid > userOverrideFormUuid > recordModel.Default_Form_UUID__c > null
+        if(!String.isBlank(componentFormUuid)){
+            result.formUuid = componentFormUuid;
+        } else if(!String.isBlank(userOverrideFormUuid)){
+            result.formUuid = userOverrideFormUuid;
+        } else {
+            result.formUuid = recordModel.Default_Form_UUID__c;
+        }
+        
         return result;
     }
 
@@ -135,42 +154,6 @@ public without sharing class DF_DocFabricator_Utility {
             }
         }
         return false;
-    }
-    /*
-    * @Description  This method will be invoked when we need Record_form_configuration metadata record for particular market_unit
-    * @Param		String - marketUnit
-    * @Return       List<Record_form_configuration__mdt>
-    */
-    public static List<Record_form_configuration__mdt> GetRecordFormConfigurationMetadataRecord_Apex(String marketUnit,String recordId,String journalType){
-        try{
-            system.debug('>>>test>> recordId +'+recordId);
-            if(String.isBlank(marketUnit)){
-                return null;
-            }
-            List<Record_form_configuration__mdt> recordFormConfigurationInstance = new List<Record_form_configuration__mdt>();
-            // Changes for ticket DIN-287 : Form and record model selector
-			// Description: Added journaltpye in in query to get the metadata records according to the type and marketunit.
-			// Start
-            recordFormConfigurationInstance = [SELECT Id,MasterLabel,Market_unit_name__c,Form_uuid__c,Record_modal_id__c,Journal_type__c,Docfab_Journal_Object__c,Salesforce_User__c, Default_Record_Model_Id__c from Record_form_configuration__mdt WHERE Market_unit_name__c =: marketUnit AND Journal_type__c=:journalType  LIMIT 1];
-            // Start
-            // Checking recordFormConfigurationInstance, record_model_id and form_uuit is not empty/blank.
-            if (!recordFormConfigurationInstance.isEmpty()) {
-                if (!String.isBlank(recordFormConfigurationInstance[0].Record_modal_id__c)) {
-system.debug('recordFormConfigurationInstance-->'+recordFormConfigurationInstance);
-                    return recordFormConfigurationInstance;
-                }else{
-                    DFJ_ErrorLogController.addErrorLogs(recordId, 'Getting metadata record according to the market_unit of journal record', '', 'Warning', 'Form_uuid__c or Record_modal_id__c field is null', '', '');
-                }
-
-            }else{
-                DFJ_ErrorLogController.addErrorLogs(recordId, 'Getting metadata record according to the market_unit of journal record', '', 'Warning', 'metadata Form_uuid__c or Record_modal_id__c field is empty. Or there may be no record for this markit unit and type', '', '');
-            }
-
-        }
-        catch(Exception ex){
-            DFJ_ErrorLogController.addErrorLogs(recordId, 'Getting metadata record according to the market_unit of journal record', ex.getMessage(), 'Error', 'DF_DocFabricator_Utility apex class GetRecordFormConfigurationMetadataRecord_Apex method.', ex.getStackTraceString(), String.valueOf(ex.getLineNumber()));
-        }
-        return null;
     }
 
     /*
@@ -873,11 +856,12 @@ system.debug('fieldName-->'+fieldName);
                     customField.relationshipLabel =  customField.fullName.substringAfterLast('.').removeEnd('__c');
                     //customField.relationshipName = prefixForMetaApiName + underscoreString + paramsToCreateField.parent_model_id + '_' + paramsToCreateField.record_model;
                     customField.relationshipName = customField.fullName.substringAfterLast('.').removeEnd('__c');
-                    //Changes DFJ-68 Starts
+                    //Changes DFJ-68 Starts - Updated to use DocFab_Record_Model__mdt
                     if(paramsToCreateField.parent_model_id == null){
-                        List<DFJ_ObjectRecordModelId__mdt> objectRecordIdInstance = new List<DFJ_ObjectRecordModelId__mdt>();
-            			objectRecordIdInstance = [SELECT Id,Docfab_Journal_Object__c,Record_model_id__c FROM DFJ_ObjectRecordModelId__mdt WHERE Docfab_Journal_Object__c =: paramsToCreateField.record_model LIMIT 1];
-						customField.referenceTo = prefixForMetaApiName + underscoreString + objectRecordIdInstance[0].Record_model_id__c + underscoreString + paramsToCreateField.destination_model +'__c';
+                        List<DocFab_Record_Model__mdt> recordModelInstance = [SELECT Id, Record_Model_Id__c FROM DocFab_Record_Model__mdt WHERE Record_Model_Id__c =: paramsToCreateField.record_model LIMIT 1];
+                        if(!recordModelInstance.isEmpty()){
+                            customField.referenceTo = prefixForMetaApiName + underscoreString + recordModelInstance[0].Record_Model_Id__c + underscoreString + paramsToCreateField.destination_model +'__c';
+                        }
                     }else{
                         //End
                         customField.referenceTo = prefixForMetaApiName + underscoreString + paramsToCreateField.parent_model_id + underscoreString + paramsToCreateField.destination_model +'__c';
