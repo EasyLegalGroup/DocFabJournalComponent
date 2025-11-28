@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ListView xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>All</fullName>
+    <columns>NAME</columns>
+    <columns>Journal_Section__c</columns>
+    <columns>Unique_Name__c</columns>
+    <filterScope>Everything</filterScope>
+    <filters>
+        <field>Journal_Section__c</field>
+        <operation>equals</operation>
+        <value>Person 1</value>
+    </filters>
+    <label>All</label>
+</ListView>

@@ -225,12 +225,12 @@ system.debug('recordFormConfigurationInstance-->'+recordFormConfigurationInstanc
                     }else{
                         // Show error toast message if user is not present.
                         recordUuidOrError = 'Current user with '+UserInfo.getUserEmail()+' does not exists in the DocFabricator system.';
-                        DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Authorizing current salesforce user so user can create record in external system.','StatusCode is '+response.getStatusCode()+' or getting responsebody : '+response, 'Warning', 'DF_DocFabricator_Utility apex class AuthenticateCurrentSalesforceUser_Apex method.','', '');
+                        DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Authorizing current salesforce user so user can create record in external system.','StatusCode is '+response.getStatusCode()+' body: '+response.getBody(), 'Warning', 'DF_DocFabricator_Utility apex class AuthenticateCurrentSalesforceUser_Apex method.','', '');
                         return recordUuidOrError;
                     }
 
                 }else{
-                    DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Authorizing current salesforce user so user can create record in external system.','StatusCode is'+response.getStatusCode()+' or getting responsebody : '+response, 'Warning', 'DF_DocFabricator_Utility apex class method AuthenticateCurrentSalesforceUser_Apex.','', '');
+                    DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Authorizing current salesforce user so user can create record in external system.','StatusCode is '+response.getStatusCode()+' body: '+response.getBody(), 'Warning', 'DF_DocFabricator_Utility apex class method AuthenticateCurrentSalesforceUser_Apex.','', '');
                 }
 
 
@@ -333,11 +333,11 @@ system.debug('recordFormConfigurationInstance-->'+recordFormConfigurationInstanc
                 if (!String.isBlank(recorduuid)) {
                     return recorduuid;
                 }else {
-                    DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Creating record in external system.','returned response : '+response, 'Warning', 'DF_DocFabricator_Utility apex class method.','', '');
+                    DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Creating record in external system.','returned response body: '+response.getBody(), 'Warning', 'DF_DocFabricator_Utility apex class method.','', '');
                 }
 
             }else {
-                DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Checking status and response string is not empty and null.','StatusCode is '+ response.getStatusCode() +' or getting responsebody :'+response, 'Warning', 'DF_DocFabricator_Utility apex class method.','', '');
+                DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Checking status and response string is not empty and null.','StatusCode is '+ response.getStatusCode() +' body: '+response.getBody(), 'Warning', 'DF_DocFabricator_Utility apex class method.','', '');
                 return 'Error Code '+ response.getStatusCode()+' '+ response.getStatus();
             }
 

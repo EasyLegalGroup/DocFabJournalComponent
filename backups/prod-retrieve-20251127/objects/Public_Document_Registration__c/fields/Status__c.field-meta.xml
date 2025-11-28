@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Status__c</fullName>
+    <label>Status</label>
+    <required>false</required>
+    <trackHistory>true</trackHistory>
+    <trackTrending>false</trackTrending>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Awaiting Document Approval</fullName>
+                <default>true</default>
+                <label>Awaiting Document Approval</label>
+            </value>
+            <value>
+                <fullName>Ready for Public Registration</fullName>
+                <default>false</default>
+                <label>Ready for Public Registration</label>
+            </value>
+            <value>
+                <fullName>Lacking Information</fullName>
+                <default>false</default>
+                <label>Lacking Information</label>
+            </value>
+            <value>
+                <fullName>Completed</fullName>
+                <default>false</default>
+                <label>Completed</label>
+            </value>
+            <value>
+                <fullName>Withdrawn</fullName>
+                <default>false</default>
+                <label>Withdrawn</label>
+            </value>
+            <value>
+                <fullName>Out of Process</fullName>
+                <default>false</default>
+                <label>Out of Process</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

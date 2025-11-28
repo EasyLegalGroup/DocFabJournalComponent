@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomMetadata xmlns="http://soap.sforce.com/2006/04/metadata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <label>Journal Dk Testamente_DK</label>
+    <protected>false</protected>
+    <values>
+        <field>Address_Configuration_Fields__c</field>
+        <value xsi:type="xsd:string">{&quot;Street&quot; :&quot;person_1_address__c&quot;,&quot;City&quot; :&quot;person_1_city__c&quot;,&quot;PostalCode&quot; :&quot;person_1_zip_code__c&quot;}</value>
+    </values>
+    <values>
+        <field>Default_Record_model_id__c</field>
+        <value xsi:type="xsd:string">54</value>
+    </values>
+    <values>
+        <field>Journal_Object__c</field>
+        <value xsi:type="xsd:string">df_journal_dk__c</value>
+    </values>
+    <values>
+        <field>Journal_type__c</field>
+        <value xsi:type="xsd:string">Inheritance</value>
+    </values>
+    <values>
+        <field>Market_unit_name__c</field>
+        <value xsi:type="xsd:string">Testamente_DK</value>
+    </values>
+</CustomMetadata>

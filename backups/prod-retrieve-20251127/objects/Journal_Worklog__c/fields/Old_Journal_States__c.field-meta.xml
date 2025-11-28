@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Old_Journal_States__c</fullName>
+    <label>Old Journal States</label>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Picklist</type>
+    <valueSet>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Ny - Første udkast</fullName>
+                <default>false</default>
+                <label>Ny - Første udkast</label>
+            </value>
+            <value>
+                <fullName>Gennemgang - Getaccept</fullName>
+                <default>false</default>
+                <label>Gennemgang - Getaccept</label>
+            </value>
+            <value>
+                <fullName>Færdig</fullName>
+                <default>false</default>
+                <label>Færdig</label>
+            </value>
+            <value>
+                <fullName>public_registration</fullName>
+                <default>false</default>
+                <label>public_registration</label>
+            </value>
+            <value>
+                <fullName>Færdig ny process</fullName>
+                <default>false</default>
+                <label>Færdig ny process</label>
+            </value>
+            <value>
+                <fullName>Tinglysning</fullName>
+                <default>false</default>
+                <label>Tinglysning</label>
+            </value>
+            <value>
+                <fullName>Intern - Ny haster</fullName>
+                <default>false</default>
+                <label>Intern - Ny haster</label>
+            </value>
+            <value>
+                <fullName>Intern - Opfølgning</fullName>
+                <default>false</default>
+                <label>Intern - Opfølgning</label>
+            </value>
+            <value>
+                <fullName>new</fullName>
+                <default>false</default>
+                <label>new</label>
+            </value>
+            <value>
+                <fullName>Hastesager (1-3 dage)</fullName>
+                <default>false</default>
+                <label>Hastesager (1-3 dage)</label>
+            </value>
+            <value>
+                <fullName>client_review</fullName>
+                <default>false</default>
+                <label>client_review</label>
+            </value>
+            <value>
+                <fullName>Klar til afsendelse</fullName>
+                <default>false</default>
+                <label>Klar til afsendelse</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

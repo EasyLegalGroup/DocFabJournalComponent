@@ -191,6 +191,8 @@ public with sharing class DFJ_JournalForm {
 				System.debug('journlaFormClicked >>>'+journlaFormClicked + 'Is docfab URL'+journalsList[0].Is_Using_Docfab__c);
 				if(journlaFormClicked){
 					System.debug('Inside If-----');
+						Savepoint sp = null;
+						Boolean shouldRollback = false;
 						String resolvedMarketUnit = resolveMarketUnit(journalsList[0], objectName, contextRecordId);
 						DF_DocFabricator_Utility.DocFabSelectionResult selection = DF_DocFabricator_Utility.selectConfiguration(resolvedMarketUnit, componentFormTypeName, componentRecordModelId, componentFormUuid, UserInfo.getUserId());
 						if(selection == null){
@@ -210,6 +212,10 @@ public with sharing class DFJ_JournalForm {
 							return journalReturnInstance;
 						}
 
+						if(objectName == 'Lead'){
+							sp = Database.setSavepoint();
+						}
+
 						String docFabUrl = CheckMarketUnitToShowForm_Apex(journalsList, selection, allowMultipleDocFabJournals, resolvedMarketUnit, objectName, contextRecordId);
 						System.debug('docFabUrl If-----'+docFabUrl);
 						if (!String.isBlank(docFabUrl)) {
@@ -223,10 +229,25 @@ public with sharing class DFJ_JournalForm {
 									journalReturnInstance.docFabUrl = null;
 								}else if(journalReturnInstance.docFabOptions != null && journalReturnInstance.docFabOptions.size() == 1){
                                     journalReturnInstance.docFabUrl = journalReturnInstance.docFabOptions[0].url;
-                                }
+								}
 							}
 						} else {
+							shouldRollback = true;
 							DFJ_ErrorLogController.addErrorLogs(JournalId, 'Checking docFabUrl is not blank', '', 'Warning', 'In getJournalData_Apex docFabUrl is null or empty', '', '');
+						}
+
+						if(objectName == 'Lead' && sp != null){
+							Boolean failed = shouldRollback;
+							if(!failed && !String.isBlank(docFabUrl)){
+								failed = docFabUrl.contains('Can not create record in DocFabricator') || docFabUrl.startsWith('Error Code') || docFabUrl.startsWith('Current user with');
+							}
+							if(failed){
+								Database.rollback(sp);
+								// If rollback does not remove a pre-created journal (from journalAssociatedWithLead), clean it up when it has no DocFab linkage.
+								if(!String.isBlank(JournalId)){
+									cleanupLeadDraftJournal(JournalId);
+								}
+							}
 						}
 
 				
@@ -1026,6 +1047,49 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 				options.add(opt);
 			}
 			return options;
+		}
+
+		/**
+		 * Clean up a lead-scoped journal that failed DocFab creation (no external UUID or record model).
+		 * Also removes any related Person__c rows created alongside it.
+		 */
+		private static void cleanupLeadDraftJournal(String journalId){
+			if(String.isBlank(journalId)){
+				return;
+			}
+			try{
+				List<Journal__c> journals = [
+					SELECT Id, External_record_uuid__c, DocFab_Record_Model_ID__c, Lead__c
+					FROM Journal__c
+					WHERE Id = :journalId
+					WITH SECURITY_ENFORCED
+					LIMIT 1
+				];
+				if(journals.isEmpty()){
+					return;
+				}
+				Journal__c j = journals[0];
+				// Only delete if we never linked to DocFab
+				if(!String.isBlank(j.External_record_uuid__c) || !String.isBlank(j.DocFab_Record_Model_ID__c)){
+					return;
+				}
+				// Remove related persons first to avoid orphan data
+				List<Person__c> people = [SELECT Id FROM Person__c WHERE Journal__c = :journalId WITH SECURITY_ENFORCED LIMIT 10000];
+				if(!people.isEmpty()){
+					delete people;
+				}
+				delete j;
+			}catch(Exception e){
+				DFJ_ErrorLogController.addErrorLogs(
+					journalId,
+					'cleanupLeadDraftJournal',
+					e.getMessage(),
+					'Error',
+					'Failed to clean up draft journal after DocFab failure',
+					e.getStackTraceString(),
+					String.valueOf(e.getLineNumber())
+				);
+			}
 		}
     //Changes DIN-383 : Improve Journal History
 	//Start

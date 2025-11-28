@@ -1,0 +1,56 @@
+.THIS {
+}
+
+.THIS .custom-background {
+    background-color: white;
+}
+.THIS.txtBoxAlign {
+    margin-top: -20px;
+}
+.THIS .slds-textarea {
+    min-height:100px;
+}
+.THIS.hlpdescr {
+    font-size: 10px;
+    color: #666666;
+    margin-top: 30px;
+    text-align: right;
+}
+
+.THIS .slds-modal__container {
+    padding-top: 1rem !important;
+    padding-right: 0px !important;
+    padding-bottom: 1rem !important;
+    padding-left: 0px !important;
+}
+
+.THIS .modalContainer {
+    max-width: 0 !important;
+    padding: 6rem 0!important;
+    width: 80% !important;
+    min-width: 93% !important;
+    height: 107px !important;
+}
+
+.THIS .background {
+    height : 44px;
+
+}
+
+.THIS .alignment {
+    text-align : center !important;
+    font-size: 14pt;
+}
+
+.THIS .customRadioCls .slds-form-element__control .slds-radio{
+    display : inline-block !important;
+}
+
+.THIS .errorMessage{
+    font-size: 10px;
+    color: #999999;
+}
+
+.THIS .buttonPadding{
+    padding-left: 307px;
+}
