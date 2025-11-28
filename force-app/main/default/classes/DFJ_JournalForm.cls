@@ -4,6 +4,12 @@
 
 public with sharing class DFJ_JournalForm {
 
+    // Backwards-compatible overload to satisfy older callers/tests expecting the legacy signature.
+    @AuraEnabled
+    public static journalWholeData getJournalData_Apex(String JournalId, String objectName, String contextRecordId, Boolean journlaFormClicked) {
+        return getJournalData_Apex(JournalId, objectName, contextRecordId, journlaFormClicked, null, null, null, false);
+    }
+
     @AuraEnabled
     public static journalWholeData getJournalData_Apex(
         String JournalId,
@@ -21,6 +27,12 @@ public with sharing class DFJ_JournalForm {
 		}
 		if (JournalId == null || JournalId.trim() == '') {
 			return null;
+		}
+
+		if(componentRecordModelId != null && !String.isBlank(componentFormTypeName)){
+			journalWholeData conflictResponse = new journalWholeData();
+			conflictResponse.docFabUrl = 'Record Model Id and Form Type cannot both be specified in the Page layout';
+			return conflictResponse;
 		}
 
 		List<Journal__c> journalsList = new List<Journal__c>();
@@ -191,9 +203,13 @@ public with sharing class DFJ_JournalForm {
 				System.debug('journlaFormClicked >>>'+journlaFormClicked + 'Is docfab URL'+journalsList[0].Is_Using_Docfab__c);
 				if(journlaFormClicked){
 					System.debug('Inside If-----');
-						Savepoint sp = null;
 						Boolean shouldRollback = false;
 						String resolvedMarketUnit = resolveMarketUnit(journalsList[0], objectName, contextRecordId);
+						if(String.isBlank(resolvedMarketUnit)){
+							String objectLabel = objectName == 'Journal__c' ? 'Journal' : objectName;
+							journalReturnInstance.docFabUrl = 'Market Unit Missing on both ' + objectLabel + ' and User';
+							return journalReturnInstance;
+						}
 						DF_DocFabricator_Utility.DocFabSelectionResult selection = DF_DocFabricator_Utility.selectConfiguration(resolvedMarketUnit, componentFormTypeName, componentRecordModelId, componentFormUuid, UserInfo.getUserId());
 						if(selection == null){
 							journalReturnInstance.docFabUrl = 'No DocFab configuration found.';
@@ -210,10 +226,6 @@ public with sharing class DFJ_JournalForm {
 						if(selection.recordModelId == null){
 							journalReturnInstance.docFabUrl = 'No record model resolved for market unit '+ resolvedMarketUnit +'.';
 							return journalReturnInstance;
-						}
-
-						if(objectName == 'Lead'){
-							sp = Database.setSavepoint();
 						}
 
 						String docFabUrl = CheckMarketUnitToShowForm_Apex(journalsList, selection, allowMultipleDocFabJournals, resolvedMarketUnit, objectName, contextRecordId);
@@ -236,17 +248,14 @@ public with sharing class DFJ_JournalForm {
 							DFJ_ErrorLogController.addErrorLogs(JournalId, 'Checking docFabUrl is not blank', '', 'Warning', 'In getJournalData_Apex docFabUrl is null or empty', '', '');
 						}
 
-						if(objectName == 'Lead' && sp != null){
+						if(objectName == 'Lead'){
 							Boolean failed = shouldRollback;
 							if(!failed && !String.isBlank(docFabUrl)){
 								failed = docFabUrl.contains('Can not create record in DocFabricator') || docFabUrl.startsWith('Error Code') || docFabUrl.startsWith('Current user with');
 							}
-							if(failed){
-								Database.rollback(sp);
-								// If rollback does not remove a pre-created journal (from journalAssociatedWithLead), clean it up when it has no DocFab linkage.
-								if(!String.isBlank(JournalId)){
-									cleanupLeadDraftJournal(JournalId);
-								}
+							if(failed && !String.isBlank(JournalId)){
+								// Clean up the draft journal/persons if DocFab failed.
+								cleanupLeadDraftJournal(JournalId);
 							}
 						}
 
@@ -934,30 +943,28 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 			return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, matchingDocFab[0].External_record_uuid__c, selection.formUuid);
 		}
 
-		// No matching DocFab journal exists; create a new Journal__c and new DocFab record.
+		// No matching DocFab journal exists; create a new DocFab record first, then persist the Journal__c.
 		Journal__c newJournal = new Journal__c();
 		newJournal.Lead__c = leadId;
 		if(!String.isBlank(resolvedMarketUnit)){
 			newJournal.Market_Unit__c = resolvedMarketUnit;
 		}
-		insert newJournal;
 
-		List<Journal__c> toUpdate = new List<Journal__c>{ newJournal };
-		String recordUuidOrError = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(String.valueOf(selection.recordModelId.longValue()), toUpdate, selection.fieldConfigurationJson);
+		List<Journal__c> transientList = new List<Journal__c>{ newJournal };
+		String recordUuidOrError = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(String.valueOf(selection.recordModelId.longValue()), transientList, selection.fieldConfigurationJson);
 		if(String.isBlank(recordUuidOrError)){
-			DFJ_ErrorLogController.addErrorLogs(newJournal.Id, 'DocFab creation', '', 'Error', 'Empty DocFab response for model '+String.valueOf(selection.recordModelId), '', '');
-			Database.delete(newJournal, false);
+			DFJ_ErrorLogController.addErrorLogs(leadId, 'DocFab creation', '', 'Error', 'Empty DocFab response for model '+String.valueOf(selection.recordModelId), '', '');
 			return 'Can not create record in DocFabricator. Please contact your admin.';
 		}
 		if (recordUuidOrError.contains('Current user with') || recordUuidOrError.contains('Error')) {
-			DFJ_ErrorLogController.addErrorLogs(newJournal.Id, 'DocFab creation', recordUuidOrError, 'Error', 'DocFab returned error for model '+String.valueOf(selection.recordModelId), '', '');
-			Database.delete(newJournal, false);
+			DFJ_ErrorLogController.addErrorLogs(leadId, 'DocFab creation', recordUuidOrError, 'Error', 'DocFab returned error for model '+String.valueOf(selection.recordModelId), '', '');
 			return recordUuidOrError;
 		}
 
-		toUpdate[0].External_record_uuid__c = recordUuidOrError;
-		toUpdate[0].DocFab_Record_Model_ID__c = targetModelId;
-		update toUpdate;
+		newJournal.External_record_uuid__c = recordUuidOrError;
+		newJournal.DocFab_Record_Model_ID__c = targetModelId;
+		insert newJournal;
+		List<Journal__c> toUpdate = new List<Journal__c>{ newJournal };
 		if(!String.isBlank(selection.docfabJournalObject)){
 			updateLookupFieldOfJournal(toUpdate, recordUuidOrError, selection.docfabJournalObject);
 		}

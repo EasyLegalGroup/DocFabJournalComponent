@@ -226,8 +226,6 @@ export default class DFJ_JournalFormComponent extends LightningElement {
             'Can not open',
             'Can not create',
             'Error',
-            'Market Unit Missing',
-            'Record Model Id and Form Type cannot both be specified',
         ];
         return errorSnippets.some((snippet) => url.includes(snippet));
     }

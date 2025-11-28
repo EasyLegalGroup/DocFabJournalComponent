@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Profiles__c</fullName>
+    <description>Contains comma seperated profiles for field permission.</description>
+    <externalId>false</externalId>
+    <label>Profiles</label>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>TextArea</type>
+</CustomField>

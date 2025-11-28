@@ -8,134 +8,6 @@ public without sharing class DF_DocFabricator_Utility {
     public static String underscoreString = '_';
     public static String postfixForMetaApiName = '__c';
     public static List<String> fieldLabelList = new List<String>{'uuid','record_model_id','version'};
-
-    public class DocFabSelectionResult{
-        public Decimal recordModelId;
-        public String formUuid;
-        public String errorMessage;
-        public String permissionError;
-        public String fieldConfigurationJson;
-        public String docfabJournalObject;
-    }
-
-    public static DocFabSelectionResult selectConfiguration(String marketUnit, String formTypeName, Decimal componentRecordModelId, String componentFormUuid, Id currentUserId){
-        DocFabSelectionResult result = new DocFabSelectionResult();
-        // Prio 1: page-level overrides (componentRecordModelId/FormUuid)
-        if(componentRecordModelId != null){
-            result.recordModelId = componentRecordModelId;
-            result.formUuid = componentFormUuid;
-            return result;
-        }
-
-        if(String.isBlank(marketUnit)){
-            result.errorMessage = 'No market unit available.';
-            return result;
-        }
-
-        String filterName = String.isNotBlank(formTypeName) ? formTypeName : null;
-
-        // Prio 2: user-specific overrides
-        List<DocFab_Model_Override__mdt> overrides;
-        if(filterName != null){
-            overrides = [
-                SELECT Id, MasterLabel, Market_Unit__c, User_Override__c, Record_Model_Override__c, Form_UUID_Override__c,
-                       Custom_Permission__c, Field_Configuration__c, Default_Field_Configuration__c
-                  FROM DocFab_Model_Override__mdt
-                 WHERE Market_Unit__c = :marketUnit AND MasterLabel = :filterName
-                 ORDER BY DeveloperName DESC
-            ];
-        }else{
-            overrides = [
-                SELECT Id, MasterLabel, Market_Unit__c, User_Override__c, Record_Model_Override__c, Form_UUID_Override__c,
-                       Custom_Permission__c, Field_Configuration__c, Default_Field_Configuration__c
-                  FROM DocFab_Model_Override__mdt
-                 WHERE Market_Unit__c = :marketUnit
-                 ORDER BY DeveloperName DESC
-            ];
-        }
-        for(DocFab_Model_Override__mdt ov : overrides){
-            if(userIsInCsv(ov.User_Override__c, currentUserId)){
-                if(!String.isBlank(ov.Custom_Permission__c) && !FeatureManagement.checkPermission(ov.Custom_Permission__c)){
-                    result.permissionError = 'You do not have access to record model ' + String.valueOf(ov.Record_Model_Override__c) + '.';
-                    return result;
-                }
-                result.recordModelId = ov.Record_Model_Override__c;
-                result.formUuid = String.isBlank(componentFormUuid) ? ov.Form_UUID_Override__c : componentFormUuid;
-                result.fieldConfigurationJson = !String.isBlank(ov.Field_Configuration__c) ? ov.Field_Configuration__c : ov.Default_Field_Configuration__c;
-                return result;
-            }
-        }
-
-        // Prio 3: default selection per market unit (Is_Default__c = true)
-        List<DocFab_Model_Selection__mdt> configs;
-        if(filterName != null){
-            configs = [
-                SELECT Id, MasterLabel, Market_Unit__c, Default_Record_Model__c, Default_Form_UUID__c,
-                       Custom_Permission__c, Is_Default__c, Field_Configuration__c, Default_Field_Configuration__c, Docfab_Journal_Object__c
-                  FROM DocFab_Model_Selection__mdt
-                 WHERE Market_Unit__c = :marketUnit AND MasterLabel = :filterName AND Is_Default__c = true
-                 ORDER BY DeveloperName DESC
-            ];
-        }else{
-            configs = [
-                SELECT Id, MasterLabel, Market_Unit__c, Default_Record_Model__c, Default_Form_UUID__c,
-                       Custom_Permission__c, Is_Default__c, Field_Configuration__c, Default_Field_Configuration__c, Docfab_Journal_Object__c
-                  FROM DocFab_Model_Selection__mdt
-                 WHERE Market_Unit__c = :marketUnit AND Is_Default__c = true
-                 ORDER BY DeveloperName DESC
-            ];
-        }
-
-        if(configs.isEmpty()){
-            result.errorMessage = 'No DocFab configuration found for market unit '+marketUnit+ (String.isNotBlank(formTypeName) ? ' and form type '+formTypeName : '') +'.';
-            return result;
-        }
-
-        DocFab_Model_Selection__mdt cfg = configs[0];
-
-        if(!String.isBlank(cfg.Custom_Permission__c) && !FeatureManagement.checkPermission(cfg.Custom_Permission__c)){
-            result.permissionError = 'You do not have access to record model ' + String.valueOf(cfg.Default_Record_Model__c) + '.';
-            return result;
-        }
-
-        result.recordModelId = cfg.Default_Record_Model__c;
-        result.formUuid = String.isBlank(componentFormUuid) ? cfg.Default_Form_UUID__c : componentFormUuid;
-        result.fieldConfigurationJson = cfg.Field_Configuration__c;
-        result.docfabJournalObject = cfg.Docfab_Journal_Object__c;
-
-        if(result.recordModelId == null){
-            result.errorMessage = 'No record model resolved for market unit '+marketUnit+'.';
-        }
-
-        return result;
-    }
-
-    public static String buildDocFabUrl(String baseUrl, String recordUuid, String formUuid){
-        if(String.isBlank(baseUrl) || String.isBlank(recordUuid)){
-            return null;
-        }
-        String url = baseUrl + 'public/form/' + recordUuid;
-        if(!String.isBlank(formUuid)){
-            url += '/' + formUuid;
-        }
-        return url;
-    }
-
-    private static Boolean userIsInCsv(String csv, Id userId){
-        if(String.isBlank(csv) || userId == null){
-            return false;
-        }
-        List<String> parts = csv.split(',');
-        for(String part : parts){
-            if(String.isBlank(part)){
-                continue;
-            }
-            if(part.trim() == String.valueOf(userId)){
-                return true;
-            }
-        }
-        return false;
-    }
     /*
     * @Description  This method will be invoked when we need Record_form_configuration metadata record for particular market_unit
     * @Param		String - marketUnit
@@ -178,12 +50,7 @@ system.debug('recordFormConfigurationInstance-->'+recordFormConfigurationInstanc
     * @Param		String - recordModelId, journalRecord
     * @Return       String - record_uuid or error
     */
-    public static String AuthenticateCurrentSalesforceUser_Apex(String recordModelId, List<Journal__c> journalRecord){
-        // Backwards-compatible overload for existing callers that do not send fieldConfigurationJson.
-        return AuthenticateCurrentSalesforceUser_Apex(recordModelId, journalRecord, null);
-    }
-
-    public static String AuthenticateCurrentSalesforceUser_Apex(String recordModelId,List<Journal__c> journalRecord, String fieldConfigurationJson){
+    public static String AuthenticateCurrentSalesforceUser_Apex(String recordModelId,List<Journal__c> journalRecord){
         // Changes for ticket - DIN-170 : Create DocFab Record.
 	    // Start
 	    // Description : authorizing current salesforce user to create record in external system.
@@ -212,7 +79,7 @@ system.debug('recordFormConfigurationInstance-->'+recordFormConfigurationInstanc
 
                         if (!String.isBlank(recordModelId)) {
                             // call api to create record in external system.
-                            recordUuidOrError = CreateRecordToOpenDocFab_Apex(recordModelId,userList[0].id,journalRecord, fieldConfigurationJson);
+                            recordUuidOrError = CreateRecordToOpenDocFab_Apex(recordModelId,userList[0].id,journalRecord);
                             return recordUuidOrError;
                         }else {
                             DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Checking recordModelId is not empty.','recordModelId is null so can not call method to create new record', 'Warning', 'DF_DocFabricator_Utility apex class AuthenticateCurrentSalesforceUser_Apex method.','', '');
@@ -221,12 +88,12 @@ system.debug('recordFormConfigurationInstance-->'+recordFormConfigurationInstanc
                     }else{
                         // Show error toast message if user is not present.
                         recordUuidOrError = 'Current user with '+UserInfo.getUserEmail()+' does not exists in the DocFabricator system.';
-                        DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Authorizing current salesforce user so user can create record in external system.','StatusCode is '+response.getStatusCode()+' body: '+response.getBody(), 'Warning', 'DF_DocFabricator_Utility apex class AuthenticateCurrentSalesforceUser_Apex method.','', '');
+                        DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Authorizing current salesforce user so user can create record in external system.','StatusCode is '+response.getStatusCode()+' or getting responsebody : '+response, 'Warning', 'DF_DocFabricator_Utility apex class AuthenticateCurrentSalesforceUser_Apex method.','', '');
                         return recordUuidOrError;
                     }
 
                 }else{
-                    DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Authorizing current salesforce user so user can create record in external system.','StatusCode is '+response.getStatusCode()+' body: '+response.getBody(), 'Warning', 'DF_DocFabricator_Utility apex class method AuthenticateCurrentSalesforceUser_Apex.','', '');
+                    DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Authorizing current salesforce user so user can create record in external system.','StatusCode is'+response.getStatusCode()+' or getting responsebody : '+response, 'Warning', 'DF_DocFabricator_Utility apex class method AuthenticateCurrentSalesforceUser_Apex.','', '');
                 }
 
 
@@ -255,12 +122,7 @@ system.debug('recordFormConfigurationInstance-->'+recordFormConfigurationInstanc
     * @Param        String - recordModelId,recordUserId,journalRecord
     * @Return       String - record_uuid
     */
-    public static String CreateRecordToOpenDocFab_Apex(String recordModelId, String recordUserId, List<Journal__c> journalRecord){
-        // Backwards-compatible overload for existing callers that do not send fieldConfigurationJson.
-        return CreateRecordToOpenDocFab_Apex(recordModelId, recordUserId, journalRecord, null);
-    }
-
-    public static String CreateRecordToOpenDocFab_Apex(String recordModelId,String recordUserId,List<Journal__c> journalRecord, String fieldConfigurationJson){
+    public static String CreateRecordToOpenDocFab_Apex(String recordModelId,String recordUserId,List<Journal__c> journalRecord){
         // Changes for ticket - DIN-170 : Create DocFab Record.
 	    // Start
 	    // Description : Creating record in external system
@@ -273,48 +135,61 @@ system.debug('recordFormConfigurationInstance-->'+recordFormConfigurationInstanc
             // Description : 
             // Start   
             
-            Map<String, Object> fieldConfigurationMap = null;
-            if(!String.isBlank(fieldConfigurationJson)){
-                fieldConfigurationMap = (Map<String,Object>) JSON.deserializeUntyped(fieldConfigurationJson);
-            }
+            //Changes Start TCS-86
+            Boolean salesforceUserExistInMetadata = false;      
+            List<DFJ_JournalDocfabFieldConfigurator__mdt> fieldConfiguratorInstance = new List<DFJ_JournalDocfabFieldConfigurator__mdt>();
+            List<Record_form_configuration__mdt> recordFormConfigurationInstance = new List<Record_form_configuration__mdt>();
 
-            Map<String, Object> contentMap = new Map<String, Object>();
-            if (fieldConfigurationMap != null && !fieldConfigurationMap.isEmpty()) {
-                if(journalRecord == null || journalRecord.isEmpty() || journalRecord[0].Id == null){
-                    // No persistent journal to query; skip SF→DocFab field mapping in this call.
-                    fieldConfigurationMap.clear();
-                }
-            }
-            if (fieldConfigurationMap != null && !fieldConfigurationMap.isEmpty()) {
-                List<String> fieldList = new List<String>(fieldConfigurationMap.keySet());
-                Id jrId = journalRecord[0].Id;
-                String query = 'SELECT '+ String.join(fieldList,',')+' FROM Journal__c WHERE Id = :jrId LIMIT 1';
-                List<Journal__c> journalRecordInstance = Database.query(query);
-                System.debug('fieldConfigurationMap >>> '+ JSON.serializePretty(fieldConfigurationMap));
-                for (String configurationKey : fieldConfigurationMap.keySet()) {
-                    String targetKey = String.valueOf(fieldConfigurationMap.get(configurationKey));
-                    String valueToSend = '';
-                    if (configurationKey.contains('Lead__r.')) {
-                        Integer dotIdx = configurationKey.indexOf('.');
-                        if(dotIdx > -1 && journalRecordInstance[0].getSobject('Lead__r') != null){
-                            String leadFieldName = configurationKey.substring(dotIdx + 1);
-                            Object leadValue = journalRecordInstance[0].getSobject('Lead__r').get(leadFieldName);
-                            valueToSend = leadValue == null ? '' : String.valueOf(leadValue);
+            fieldConfiguratorInstance = [SELECT Id,MasterLabel,Field_Configuration__c,Journal_type__c,Market_unit__c,Default_Field_Configurater__c FROM DFJ_JournalDocfabFieldConfigurator__mdt WHERE Market_unit__c =: journalRecord[0].Market_Unit__c AND Journal_type__c =: journalRecord[0].Type__c  LIMIT 1];
+			recordFormConfigurationInstance = GetRecordFormConfigurationMetadataRecord_Apex(journalRecord[0].Market_Unit__c,journalRecord[0].Id,journalRecord[0].Type__c);
+
+            if(!recordFormConfigurationInstance.isEmpty() && String.isNotBlank(recordFormConfigurationInstance[0].Salesforce_User__c)){
+                String salesforceUserId = recordFormConfigurationInstance[0].Salesforce_User__c;	
+                String currentUserId = UserInfo.getUserId();	
+                salesforceUserExistInMetadata = salesforceUserId.contains(currentUserId);			
+            }           
+        
+            if (test.isRunningTest()) {
+                fieldConfiguratorInstance.add(DFJ_JournalDocfabFieldConfigurator__mdt.getInstance('Test_All_Market'));
+            }            
+            String body = '{"owner_id":"'+recordUserId+'","record_model_id":"'+recordModelId+'","content":{';
+            if(String.isBlank(journalRecord[0].Account__c) || String.isNotBlank(journalRecord[0].Lead__c) || salesforceUserExistInMetadata)  //Chnages TCS-53
+            {
+                if (!fieldConfiguratorInstance.isEmpty() && !String.isEmpty(fieldConfiguratorInstance[0].Field_Configuration__c)) {    //Chnages TCS_53
+                    Map<String,Object> fieldConfigurationMap = (Map<String,Object>) (salesforceUserExistInMetadata ? JSON.deserializeUntyped(fieldConfiguratorInstance[0].Default_Field_Configurater__c) :JSON.deserializeUntyped(fieldConfiguratorInstance[0].Field_Configuration__c));
+                    String query = 'SELECT '+ String.join(new List<String>(fieldConfigurationMap.keySet()),',')+' FROM Journal__c WHERE ID=\''+journalRecord[0].Id+ '\' LIMIT 1';
+                    List<Journal__c> journalRecordInstance = new List<Journal__c>();
+                    
+                    journalRecordInstance = Database.query(query);
+                    System.System.debug('fieldConfiguratorInstance >>> '+ JSON.serializePretty(fieldConfigurationMap)); // DIN-339 changes
+                    if (fieldConfigurationMap != null && !fieldConfigurationMap.keySet().isEmpty()) {
+                        for (String configurationKey : fieldConfigurationMap.keySet()) {
+                            if (configurationKey.contains('Lead__r.')) {
+                                List<String> fieldLead = configurationKey.split('\\.');
+                                String value = string.valueof(journalRecordInstance[0].getSobject('Lead__r').get(fieldLead[1]));
+                                body += '"'+ String.valueOf(fieldConfigurationMap.get(configurationKey)) + '" : "'+(String.isBlank(value) ? '': EscapeReversedCharacters_Apex(String.valueOf(value))) +'",';
+                            }else{
+                                body += '"'+ String.valueOf(fieldConfigurationMap.get(configurationKey)) + '" : "'+ (journalRecordInstance[0].get(configurationKey) == null ? '': EscapeReversedCharacters_Apex(String.valueOf(journalRecordInstance[0].get(configurationKey)))) +'",';
+                            }
                         }
-                    } else {
-                        Object fieldValue = journalRecordInstance[0].get(configurationKey);
-                        valueToSend = fieldValue == null ? '' : String.valueOf(fieldValue);
                     }
-                    contentMap.put(targetKey, valueToSend);
+                }else {
+                    return 'Error field configuration not found.';
                 }
+            }else{   //Chnages TCS-53
+                body += '"journal_name" : "'+ journalRecord[0].Name +'","person_1_first_name":"'+journalRecord[0].Account__r.FirstName+'","person_1_last_name":"'+journalRecord[0].Account__r.LastName+'",';
             }
+             //End1
+            // changes for ticket DIN-175 : Create docfab record with prefilled data.
+			// Description : Sending the journal data in request body to prefilled the Docfab form.
+			// Start
+            // Changes for ticket DIN-254 : Add "OK" button to docfab error toast and include status message from api service
+            // Description : Added code to escape the characters.
+            // Start
 
-            Map<String, Object> payload = new Map<String, Object>();
-            payload.put('owner_id', recordUserId);
-            payload.put('record_model_id', recordModelId);
-            payload.put('content', contentMap);
-
-            String body = JSON.serialize(payload);
+            body = body.removeEnd(',');
+            body += '}}';            
+            // End
             System.debug('body body >>>> '+body);
             Doc_Fabricator_Setting__c docFabSetting = Doc_Fabricator_Setting__c.getOrgDefaults();
             // docfab endpoint
@@ -340,11 +215,11 @@ system.debug('recordFormConfigurationInstance-->'+recordFormConfigurationInstanc
                 if (!String.isBlank(recorduuid)) {
                     return recorduuid;
                 }else {
-                    DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Creating record in external system.','returned response body: '+response.getBody(), 'Warning', 'DF_DocFabricator_Utility apex class method.','', '');
+                    DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Creating record in external system.','returned response : '+response, 'Warning', 'DF_DocFabricator_Utility apex class method.','', '');
                 }
 
             }else {
-                DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Checking status and response string is not empty and null.','StatusCode is '+ response.getStatusCode() +' body: '+response.getBody(), 'Warning', 'DF_DocFabricator_Utility apex class method.','', '');
+                DFJ_ErrorLogController.addErrorLogs(journalRecord[0].Id, 'Checking status and response string is not empty and null.','StatusCode is '+ response.getStatusCode() +' or getting responsebody :'+response, 'Warning', 'DF_DocFabricator_Utility apex class method.','', '');
                 return 'Error Code '+ response.getStatusCode()+' '+ response.getStatus();
             }
 
@@ -360,9 +235,9 @@ system.debug('recordFormConfigurationInstance-->'+recordFormConfigurationInstanc
     }
 
     /*
-    * @Description  Remove characters that would break DocFab payloads.
+    * @Description  This method will removing the reversed character. Changes for ticket DIN-254 : Add "OK" button to docfab error toast and include status message from api service
     * @Param        String - stringBody
-    * @Return       String - escaped string
+    * @Return       String - stringBody
     */
     public static String EscapeReversedCharacters_Apex(String stringBody){
         try {

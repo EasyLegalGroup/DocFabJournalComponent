@@ -1,0 +1,159 @@
+<!--
+ - Created by shubh on 21-08-2019.
+ -->
+
+<aura:component description="DFJ_JournalFormConfiguration" controller="DFJ_JournalFormConfiguration_Apex" implements="flexipage:availableForAllPageTypes,force:appHostable">
+
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}" />
+    <aura:attribute name="selectedProductId" type="String" default="" access="global" />
+    <aura:attribute name="selectedSection" type="String" default="" access="global" />
+    <aura:attribute name="selectedField" type="String" default="" access="global" />
+    <aura:attribute name="isSpinnerOpen" type="Boolean" default="false" />
+    <aura:attribute name="showSectionList" type="Boolean" default="false" />
+    <aura:attribute name="productsList" type="Product2[]" access="global" default="[]" />
+    <aura:attribute name="JournalConfigurationList" type="Journal_Configuration__c[]" access="global" default="[]" />
+    <aura:attribute name="allSectionList" type="Object[]" access="global" default="[]" />
+    <aura:attribute name="allFieldList" type="Journal_Field__c[]" access="global" default="[]" />
+    <aura:attribute name="sectionList" type="Object[]" access="global"/>
+    <aura:attribute name="configToDelete" type="List" default="[]" />
+    <div>
+        <div class="background">
+            <aura:if isTrue="{!v.isSpinnerOpen}">
+                <div>
+                    <lightning:spinner variant="brand" size="large" alternativeText="Loading"/>
+                </div>
+            </aura:if>
+
+            <div class="slds-p-around_small">
+
+                <div class="slds-text-heading_medium">
+                    Journal Form Configuration
+                </div>
+                <div>
+
+                    <lightning:select label="Select product" value="{!v.selectedProductId}" onchange="{!c.getProductConfiguration}" >
+                        <option value="">None</option>
+                        <aura:iteration items="{!v.productsList}" var="prod" >
+                            <option value="{!prod.Id}">{!prod.Name}</option>
+                        </aura:iteration>
+                    </lightning:select>
+
+                </div>
+
+                <aura:if isTrue="{!not(empty(v.selectedProductId))}">
+                    <div class="slds-p-around_small">
+                        <lightning:layout multipleRows="false" >
+                            <lightning:layoutItem size="3">
+                                <lightning:button variant="brand" iconName="utility:add" type="button" label="Add Section" onclick="{!c.getAllSections}" />
+                            </lightning:layoutItem>
+                            <aura:if isTrue="{!v.showSectionList}">
+                                <lightning:layoutItem size="3">
+                                    <lightning:select label="Select Section" value="{!v.selectedSection}" aura:id="sectionPicklist">
+                                        <option value="">None</option>
+                                        <aura:iteration items="{!v.allSectionList}" var="prod" indexVar="index">
+                                            <aura:if isTrue="{!prod.journalSection.isVisible}">
+                                                <option value="{!prod.journalSection.Id}" tabindex="{!index}">{!prod.journalSection.Name}</option>
+                                            </aura:if>
+                                        </aura:iteration>
+                                    </lightning:select>
+                                </lightning:layoutItem>
+
+                                <lightning:layoutItem size="6">
+                                    <lightning:button variant="brand" iconName="utility:add" type="button" label="Add Section" onclick="{!c.AddSectionToList}" />
+                                    <lightning:button variant="brand" iconName="utility:close" type="button" label="Cancel" onclick="{!c.cancelButton}" />
+                                </lightning:layoutItem>
+                            </aura:if>
+                        </lightning:layout>
+                        <lightning:layout multipleRows="true">
+                            <lightning:layoutItem size="12" largeDeviceSize="12" mediumDeviceSize="12" smallDeviceSize="12">
+                                <div>
+                                    <lightning:accordion aura:id="accordion">
+                                        <aura:iteration items="{!v.sectionList}" var="section" indexVar="index1">
+                                            <lightning:accordionSection name="{!section.Id}" label="{!section.Name}">
+                                                <aura:set attribute="body">
+                                                    <lightning:layout >
+                                                        <lightning:layoutItem largeDeviceSize="9" size="12">
+                                                            <div>
+                                                                <lightning:select label="Select Field" value="{!section.fieldPicklistValue}">
+                                                                    <option value="">None</option>
+                                                                    <aura:iteration items="{!section.allJournalFields}" var="prod" >
+                                                                        <aura:if isTrue="{!prod.isVisible}">
+                                                                            <option value="{!prod.Id}">{!prod.Name}</option>
+                                                                        </aura:if>
+                                                                    </aura:iteration>
+                                                                </lightning:select>
+                                                            </div>
+                                                        </lightning:layoutItem>
+                                                        <lightning:layoutItem>
+                                                            <lightning:layout>
+                                                                <lightning:layoutItem largeDeviceSize="7" size="12">
+                                                                    <div class="slds-p-around_large">
+                                                                        <lightning:button variant="brand" iconName="utility:add" type="button" label="Add Field" tabindex="{!index1}" onclick="{!c.addFieldToList}"/>
+                                                                    </div>
+                                                                </lightning:layoutItem>
+                                                                <lightning:layoutItem largeDeviceSize="7" size="12">
+                                                                    <div class="slds-float_left slds-p-around_large">
+                                                                        <lightning:button variant="brand" iconName="utility:delete" type="button" label="Delete Section" name="{!section.configId}" tabindex="{!index1}" onclick="{!c.deleteSection}"/>
+                                                                    </div>
+                                                                </lightning:layoutItem>
+                                                            </lightning:layout>
+                                                        </lightning:layoutItem>
+                                                    </lightning:layout>
+
+                                                    <div class="slds-p-around--medium">
+                                                        <table class="slds-table slds-table_cell-buffer slds-table_bordered">
+                                                            <thead>
+                                                            <tr class="slds-line-height_reset">
+                                                                <th class="" scope="col">
+                                                                    <div class="slds-truncate" title="Field Name">Field Name</div>
+                                                                </th>
+                                                                <th class="" scope="col">
+                                                                    <div class="slds-truncate" title="Is Mandatory">Is Mandatory</div>
+                                                                </th>
+                                                                <th class="" scope="col">
+                                                                    <div class="slds-truncate" title="Action">Action</div>
+                                                                </th>
+                                                            </tr>
+                                                            </thead>
+                                                            <aura:iteration items="{!section.selctedFields}" var="field" indexVar="index">
+                                                                <tbody>
+                                                                <tr class="slds-hint-parent">
+                                                                    <td>
+                                                                        <div class="slds-truncate" >
+                                                                                {!field.Name}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td>
+                                                                        <div class="slds-truncate" >
+                                                                            <lightning:input label="" name="" type="checkbox" checked = "{!field.isMandatory}"/>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td>
+                                                                        <div class="slds-truncate">
+                                                                            <lightning:buttonIcon iconName="utility:delete" variant="border" onclick="{!c.deleteField}" alternativeText="Delete" tabindex="{!index}" name="{!index1}"/>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                                </tbody>
+                                                            </aura:iteration>
+                                                        </table>
+                                                    </div>
+                                                </aura:set>
+                                            </lightning:accordionSection>
+                                        </aura:iteration>
+                                    </lightning:accordion>
+                                </div>
+                            </lightning:layoutItem>
+                            <lightning:layoutItem size="12" smallDeviceSize="12" mediumDeviceSize="12" largeDeviceSize="12">
+                                <div class="slds-p-around_small slds-float_right">
+                                    <lightning:button variant="brand"  type="button" label="Save" onclick="{!c.saveData}" />
+                                </div>
+                            </lightning:layoutItem>
+                        </lightning:layout>
+                    </div>
+
+                </aura:if>
+            </div>
+        </div>
+    </div>
+</aura:component>

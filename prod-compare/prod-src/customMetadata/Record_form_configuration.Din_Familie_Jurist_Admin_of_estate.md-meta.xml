@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomMetadata xmlns="http://soap.sforce.com/2006/04/metadata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <label>Din Familie Jurist Admin of estate</label>
+    <protected>false</protected>
+    <values>
+        <field>Address_Configuration_Fields__c</field>
+        <value xsi:nil="true"/>
+    </values>
+    <values>
+        <field>Default_Record_Model_Id__c</field>
+        <value xsi:type="xsd:string">160</value>
+    </values>
+    <values>
+        <field>Docfab_Journal_Object__c</field>
+        <value xsi:type="xsd:string">df_journal_dk__c</value>
+    </values>
+    <values>
+        <field>Form_uuid__c</field>
+        <value xsi:type="xsd:string">75dd5f39-57bc-44ab-95aa-9645bf875db2</value>
+    </values>
+    <values>
+        <field>Journal_type__c</field>
+        <value xsi:type="xsd:string">Admin of estate</value>
+    </values>
+    <values>
+        <field>Market_unit_name__c</field>
+        <value xsi:type="xsd:string">DFJ_DK</value>
+    </values>
+    <values>
+        <field>Record_modal_id__c</field>
+        <value xsi:type="xsd:string">85</value>
+    </values>
+    <values>
+        <field>Salesforce_User__c</field>
+        <value xsi:nil="true"/>
+    </values>
+</CustomMetadata>
