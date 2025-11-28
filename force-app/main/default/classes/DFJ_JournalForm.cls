@@ -852,9 +852,11 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 
 			String recordUuidOrError = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(String.valueOf(selection.recordModelId.longValue()), journalData, selection.fieldConfigurationJson);
 			if(String.isBlank(recordUuidOrError)){
+				DFJ_ErrorLogController.addErrorLogs(journalData[0].Id, 'DocFab creation', '', 'Error', 'Empty DocFab response for model '+String.valueOf(selection.recordModelId), '', '');
 				return 'Can not create record in DocFabricator. Please contact your admin.';
 			}
 			if (recordUuidOrError.contains('Current user with') || recordUuidOrError.contains('Error')) {
+				DFJ_ErrorLogController.addErrorLogs(journalData[0].Id, 'DocFab creation', recordUuidOrError, 'Error', 'DocFab returned error for model '+String.valueOf(selection.recordModelId), '', '');
 				return recordUuidOrError;
 			}
 
@@ -922,9 +924,13 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 		List<Journal__c> toUpdate = new List<Journal__c>{ newJournal };
 		String recordUuidOrError = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(String.valueOf(selection.recordModelId.longValue()), toUpdate, selection.fieldConfigurationJson);
 		if(String.isBlank(recordUuidOrError)){
+			DFJ_ErrorLogController.addErrorLogs(newJournal.Id, 'DocFab creation', '', 'Error', 'Empty DocFab response for model '+String.valueOf(selection.recordModelId), '', '');
+			Database.delete(newJournal, false);
 			return 'Can not create record in DocFabricator. Please contact your admin.';
 		}
 		if (recordUuidOrError.contains('Current user with') || recordUuidOrError.contains('Error')) {
+			DFJ_ErrorLogController.addErrorLogs(newJournal.Id, 'DocFab creation', recordUuidOrError, 'Error', 'DocFab returned error for model '+String.valueOf(selection.recordModelId), '', '');
+			Database.delete(newJournal, false);
 			return recordUuidOrError;
 		}
 
