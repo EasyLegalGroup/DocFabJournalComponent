@@ -9,6 +9,9 @@ public without sharing class DF_DocFabricator_Utility {
     public static String postfixForMetaApiName = '__c';
     public static List<String> fieldLabelList = new List<String>{'uuid','record_model_id','version'};
 
+    /**
+     * Result wrapper for the two-tier permission-based selection.
+     */
     public class DocFabSelectionResult{
         public Decimal recordModelId;
         public String formUuid;
@@ -18,114 +21,418 @@ public without sharing class DF_DocFabricator_Utility {
     }
 
     /**
-     * New selectConfiguration using 3-CMDT architecture:
-     * - DocFab_Record_Model__mdt: Master definitions (Record Model ID + Field Config)
-     * - DocFab_Market_Default__mdt: Default Record Model per Market Unit
-     * - DocFab_User_Override__mdt: Per-user overrides
-     * 
-     * Priority for Record Model ID:
-     * 1. componentRecordModelId (from LWC page layout)
-     * 2. DocFab_User_Override__mdt (if user matches)
-     * 3. DocFab_Market_Default__mdt (market default)
-     * 
-     * Priority for Form UUID:
-     * 1. componentFormUuid (from LWC page layout)
-     * 2. DocFab_User_Override__mdt.Form_UUID_Override__c (if user matches)
-     * 3. DocFab_Record_Model__mdt.Default_Form_UUID__c
-     * 4. null (DocFab uses its default)
-     * 
-     * Field Configuration is ALWAYS looked up from DocFab_Record_Model__mdt
+     * Wrapper for Record Model options shown in the UI picker.
      */
-    public static DocFabSelectionResult selectConfiguration(String marketUnit, String formTypeName, Decimal componentRecordModelId, String componentFormUuid, Id currentUserId){
-        DocFabSelectionResult result = new DocFabSelectionResult();
-        String resolvedRecordModelId = null;
-        String userOverrideFormUuid = null;
+    public class RecordModelOption {
+        @AuraEnabled public String recordModelId;
+        @AuraEnabled public String label;
+        @AuraEnabled public String icon;
+        @AuraEnabled public String developerName;
+    }
+
+    /**
+     * Wrapper for Form options shown in the UI picker.
+     */
+    public class FormOption {
+        @AuraEnabled public String formUuid;
+        @AuraEnabled public Decimal formNumber;
+        @AuraEnabled public String recordModelId;
+        @AuraEnabled public String label;
+        @AuraEnabled public String icon;
+        @AuraEnabled public String developerName;
+    }
+
+    /**
+     * Result wrapper for the two-tier selection process.
+     * Contains accessible record models and forms, plus metadata for the LWC to decide what to show.
+     */
+    public class SelectionOptions {
+        @AuraEnabled public List<RecordModelOption> recordModels = new List<RecordModelOption>();
+        @AuraEnabled public List<FormOption> forms = new List<FormOption>();
+        @AuraEnabled public String errorMessage;
+        @AuraEnabled public Boolean requiresRecordModelSelection = false;
+        @AuraEnabled public Boolean requiresFormSelection = false;
+        // If only one record model and one form, these are populated for direct open
+        @AuraEnabled public String resolvedRecordModelId;
+        @AuraEnabled public String resolvedFormUuid;
+        @AuraEnabled public String fieldConfigurationJson;
+    }
+
+    /**
+     * Default icons for record models and forms when not specified in CMDT.
+     */
+    public static final String DEFAULT_RECORD_MODEL_ICON = 'utility:data_mapping';
+    public static final String DEFAULT_FORM_ICON = 'utility:care_request_reviewer';
+
+    /**
+     * Two-tier permission-based selection using DocFab_Record_Model__mdt and DocFab_Form__mdt.
+     * 
+     * Configuration is defined at the page layout level:
+     * - recordModelIds: Comma-separated list of allowed Record Model IDs (e.g., "160, 54, 22")
+     * - formNumbers: Comma-separated list of allowed Form Numbers (e.g., "17, 51, 22")
+     * 
+     * The user must have Custom Permission for BOTH the Record Model AND the Form to access it.
+     * 
+     * Flow:
+     * 1. Parse the comma-separated lists from the page layout
+     * 2. Query DocFab_Form__mdt for the specified Form Numbers (which also gives us their parent Record Models)
+     * 3. Also query any directly-specified Record Model IDs
+     * 4. Filter both to only those the user has Custom Permission for
+     * 5. Return the accessible options for the LWC to display
+     * 
+     * @param recordModelIdsCsv Comma-separated Record Model IDs from page layout (can be empty)
+     * @param formNumbersCsv Comma-separated Form Numbers from page layout (required)
+     * @return SelectionOptions with accessible record models and forms
+     */
+    @AuraEnabled(cacheable=false)
+    public static SelectionOptions getAccessibleOptions(String recordModelIdsCsv, String formNumbersCsv){
+        SelectionOptions result = new SelectionOptions();
         
-        // STEP 1: Determine Record Model ID
+        // Parse inputs
+        Set<String> requestedRecordModelIds = parseCsvToSet(recordModelIdsCsv);
+        Set<Decimal> requestedFormNumbers = parseCsvToDecimalSet(formNumbersCsv);
         
-        // Priority 1: Page-level override from LWC component
-        if(componentRecordModelId != null){
-            resolvedRecordModelId = String.valueOf(componentRecordModelId.longValue());
-        }
-        
-        // Priority 2: User-specific override
-        if(resolvedRecordModelId == null && currentUserId != null){
-            List<DocFab_User_Override__mdt> userOverrides = [
-                SELECT Id, User_Ids__c, Form_UUID_Override__c,
-                       Override_Record_Model__r.Record_Model_Id__c
-                  FROM DocFab_User_Override__mdt
-            ];
-            for(DocFab_User_Override__mdt uo : userOverrides){
-                if(userIsInCsv(uo.User_Ids__c, currentUserId)){
-                    resolvedRecordModelId = uo.Override_Record_Model__r.Record_Model_Id__c;
-                    userOverrideFormUuid = uo.Form_UUID_Override__c;
-                    break;
-                }
-            }
-        }
-        
-        // Priority 3: Market Default
-        if(resolvedRecordModelId == null){
-            if(String.isBlank(marketUnit)){
-                result.errorMessage = 'No market unit available.';
-                return result;
-            }
-            
-            List<DocFab_Market_Default__mdt> marketDefaults = [
-                SELECT Id, Market_Unit__c,
-                       Default_Record_Model__r.Record_Model_Id__c
-                  FROM DocFab_Market_Default__mdt
-                 WHERE Market_Unit__c = :marketUnit
-                 LIMIT 1
-            ];
-            
-            if(marketDefaults.isEmpty()){
-                result.errorMessage = 'No DocFab configuration found for market unit ' + marketUnit + '.';
-                return result;
-            }
-            
-            resolvedRecordModelId = marketDefaults[0].Default_Record_Model__r.Record_Model_Id__c;
-        }
-        
-        // STEP 2: Look up Record Model definition (ALWAYS happens)
-        if(String.isBlank(resolvedRecordModelId)){
-            result.errorMessage = 'Could not resolve a Record Model ID.';
+        // Validate: At least form numbers must be configured
+        if(requestedFormNumbers.isEmpty()){
+            result.errorMessage = 'No Journal Form has been configured for this page.';
             return result;
         }
         
+        // Query forms and their parent record models by Form Number
+        List<DocFab_Form__mdt> allForms = [
+            SELECT Id, DeveloperName, Form_UUID__c, Form_Number__c, Custom_Permission__c, Icon__c, Page_Layout_Label__c,
+                   Record_Model__c, Record_Model__r.Record_Model_Id__c, Record_Model__r.Custom_Permission__c,
+                   Record_Model__r.DeveloperName, Record_Model__r.Icon__c, Record_Model__r.Page_Layout_Label__c,
+                   Record_Model__r.Field_Configuration__c
+              FROM DocFab_Form__mdt
+             WHERE Form_Number__c IN :requestedFormNumbers
+        ];
+        
+        // Also query any directly-specified record models (in case they want to show record models without specific forms)
+        Map<String, DocFab_Record_Model__mdt> recordModelMap = new Map<String, DocFab_Record_Model__mdt>();
+        if(!requestedRecordModelIds.isEmpty()){
+            List<DocFab_Record_Model__mdt> directRecordModels = [
+                SELECT Id, DeveloperName, Record_Model_Id__c, Custom_Permission__c, Icon__c, 
+                       Page_Layout_Label__c, Field_Configuration__c
+                  FROM DocFab_Record_Model__mdt
+                 WHERE Record_Model_Id__c IN :requestedRecordModelIds
+            ];
+            for(DocFab_Record_Model__mdt rm : directRecordModels){
+                recordModelMap.put(rm.Record_Model_Id__c, rm);
+            }
+        }
+        
+        // Add record models from forms to the map
+        for(DocFab_Form__mdt f : allForms){
+            if(f.Record_Model__r != null && !recordModelMap.containsKey(f.Record_Model__r.Record_Model_Id__c)){
+                recordModelMap.put(f.Record_Model__r.Record_Model_Id__c, f.Record_Model__r);
+            }
+        }
+        
+        // Filter record models by permission
+        Map<String, DocFab_Record_Model__mdt> accessibleRecordModels = new Map<String, DocFab_Record_Model__mdt>();
+        for(String rmId : recordModelMap.keySet()){
+            DocFab_Record_Model__mdt rm = recordModelMap.get(rmId);
+            if(hasPermission(rm.Custom_Permission__c)){
+                accessibleRecordModels.put(rmId, rm);
+            }
+        }
+        
+        // Filter forms by permission (both form permission AND parent record model permission)
+        List<DocFab_Form__mdt> accessibleForms = new List<DocFab_Form__mdt>();
+        for(DocFab_Form__mdt f : allForms){
+            String parentRmId = f.Record_Model__r != null ? f.Record_Model__r.Record_Model_Id__c : null;
+            // Must have permission for both the form AND its parent record model
+            if(hasPermission(f.Custom_Permission__c) && accessibleRecordModels.containsKey(parentRmId)){
+                accessibleForms.add(f);
+            }
+        }
+        
+        // Check if user has no access to anything
+        if(accessibleForms.isEmpty()){
+            result.errorMessage = 'You do not have access to any Journal Forms configured for this page.';
+            return result;
+        }
+        
+        // Build the result options
+        // Group forms by record model
+        Map<String, List<DocFab_Form__mdt>> formsByRecordModel = new Map<String, List<DocFab_Form__mdt>>();
+        Set<String> recordModelIdsWithForms = new Set<String>();
+        for(DocFab_Form__mdt f : accessibleForms){
+            String rmId = f.Record_Model__r.Record_Model_Id__c;
+            recordModelIdsWithForms.add(rmId);
+            if(!formsByRecordModel.containsKey(rmId)){
+                formsByRecordModel.put(rmId, new List<DocFab_Form__mdt>());
+            }
+            formsByRecordModel.get(rmId).add(f);
+        }
+        
+        // Build RecordModelOption list (only record models that have accessible forms)
+        for(String rmId : recordModelIdsWithForms){
+            DocFab_Record_Model__mdt rm = accessibleRecordModels.get(rmId);
+            if(rm == null) continue;
+            
+            RecordModelOption opt = new RecordModelOption();
+            opt.recordModelId = rm.Record_Model_Id__c;
+            opt.label = String.isNotBlank(rm.Page_Layout_Label__c) ? rm.Page_Layout_Label__c : rm.DeveloperName;
+            opt.icon = String.isNotBlank(rm.Icon__c) ? rm.Icon__c : DEFAULT_RECORD_MODEL_ICON;
+            opt.developerName = rm.DeveloperName;
+            result.recordModels.add(opt);
+        }
+        
+        // Build FormOption list
+        for(DocFab_Form__mdt f : accessibleForms){
+            FormOption opt = new FormOption();
+            opt.formUuid = f.Form_UUID__c;
+            opt.formNumber = f.Form_Number__c;
+            opt.recordModelId = f.Record_Model__r.Record_Model_Id__c;
+            opt.label = String.isNotBlank(f.Page_Layout_Label__c) ? f.Page_Layout_Label__c : f.DeveloperName;
+            opt.icon = String.isNotBlank(f.Icon__c) ? f.Icon__c : DEFAULT_FORM_ICON;
+            opt.developerName = f.DeveloperName;
+            result.forms.add(opt);
+        }
+        
+        // Determine selection requirements
+        Integer numRecordModels = result.recordModels.size();
+        Integer numForms = result.forms.size();
+        
+        if(numRecordModels == 1 && numForms == 1){
+            // Direct open - no selection needed
+            result.requiresRecordModelSelection = false;
+            result.requiresFormSelection = false;
+            result.resolvedRecordModelId = result.recordModels[0].recordModelId;
+            result.resolvedFormUuid = result.forms[0].formUuid;
+            // Get field configuration
+            DocFab_Record_Model__mdt rm = accessibleRecordModels.get(result.resolvedRecordModelId);
+            result.fieldConfigurationJson = rm != null ? rm.Field_Configuration__c : null;
+        } else if(numRecordModels == 1){
+            // Only one record model, but multiple forms - show form picker
+            result.requiresRecordModelSelection = false;
+            result.requiresFormSelection = true;
+            result.resolvedRecordModelId = result.recordModels[0].recordModelId;
+            // Get field configuration
+            DocFab_Record_Model__mdt rm = accessibleRecordModels.get(result.resolvedRecordModelId);
+            result.fieldConfigurationJson = rm != null ? rm.Field_Configuration__c : null;
+        } else {
+            // Multiple record models - show record model picker first
+            result.requiresRecordModelSelection = true;
+            // Form selection depends on how many forms the selected record model has
+            // This will be determined by the LWC after user selects a record model
+        }
+        
+        return result;
+    }
+
+    /**
+     * Get forms for a specific record model (called after user selects a record model).
+     * Returns only forms the user has permission to access.
+     * 
+     * @param recordModelId The Record Model ID selected by the user
+     * @param formNumbersCsv Comma-separated Form Numbers from page layout
+     */
+    @AuraEnabled(cacheable=false)
+    public static SelectionOptions getFormsForRecordModel(String recordModelId, String formNumbersCsv){
+        SelectionOptions result = new SelectionOptions();
+        
+        if(String.isBlank(recordModelId)){
+            result.errorMessage = 'Record Model ID is required.';
+            return result;
+        }
+        
+        Set<Decimal> requestedFormNumbers = parseCsvToDecimalSet(formNumbersCsv);
+        if(requestedFormNumbers.isEmpty()){
+            result.errorMessage = 'No forms configured.';
+            return result;
+        }
+        
+        // Get the record model
         List<DocFab_Record_Model__mdt> recordModels = [
-            SELECT Id, Record_Model_Id__c, Field_Configuration__c, Default_Form_UUID__c, Custom_Permission__c, Description__c
+            SELECT Id, DeveloperName, Record_Model_Id__c, Custom_Permission__c, Icon__c, 
+                   Page_Layout_Label__c, Field_Configuration__c
               FROM DocFab_Record_Model__mdt
-             WHERE Record_Model_Id__c = :resolvedRecordModelId
+             WHERE Record_Model_Id__c = :recordModelId
              LIMIT 1
         ];
         
         if(recordModels.isEmpty()){
-            result.errorMessage = 'Record Model ID ' + resolvedRecordModelId + ' is not configured in DocFab_Record_Model__mdt.';
+            result.errorMessage = 'Record Model not found.';
+            return result;
+        }
+        
+        DocFab_Record_Model__mdt rm = recordModels[0];
+        
+        // Check permission for record model
+        if(!hasPermission(rm.Custom_Permission__c)){
+            result.errorMessage = 'You do not have access to this record model.';
+            return result;
+        }
+        
+        // Get forms for this record model that are in the requested list (by Form Number)
+        List<DocFab_Form__mdt> forms = [
+            SELECT Id, DeveloperName, Form_UUID__c, Form_Number__c, Custom_Permission__c, Icon__c, Page_Layout_Label__c,
+                   Record_Model__r.Record_Model_Id__c
+              FROM DocFab_Form__mdt
+             WHERE Form_Number__c IN :requestedFormNumbers
+               AND Record_Model__r.Record_Model_Id__c = :recordModelId
+        ];
+        
+        // Filter by permission
+        List<DocFab_Form__mdt> accessibleForms = new List<DocFab_Form__mdt>();
+        for(DocFab_Form__mdt f : forms){
+            if(hasPermission(f.Custom_Permission__c)){
+                accessibleForms.add(f);
+            }
+        }
+        
+        if(accessibleForms.isEmpty()){
+            result.errorMessage = 'You do not have access to any forms for this record model.';
+            return result;
+        }
+        
+        // Build form options
+        for(DocFab_Form__mdt f : accessibleForms){
+            FormOption opt = new FormOption();
+            opt.formUuid = f.Form_UUID__c;
+            opt.formNumber = f.Form_Number__c;
+            opt.recordModelId = recordModelId;
+            opt.label = String.isNotBlank(f.Page_Layout_Label__c) ? f.Page_Layout_Label__c : f.DeveloperName;
+            opt.icon = String.isNotBlank(f.Icon__c) ? f.Icon__c : DEFAULT_FORM_ICON;
+            opt.developerName = f.DeveloperName;
+            result.forms.add(opt);
+        }
+        
+        result.resolvedRecordModelId = recordModelId;
+        result.fieldConfigurationJson = rm.Field_Configuration__c;
+        
+        if(result.forms.size() == 1){
+            result.requiresFormSelection = false;
+            result.resolvedFormUuid = result.forms[0].formUuid;
+        } else {
+            result.requiresFormSelection = true;
+        }
+        
+        return result;
+    }
+
+    /**
+     * Legacy selectConfiguration method - now simplified to work with the new architecture.
+     * This is kept for backwards compatibility with existing code that calls it.
+     * 
+     * @param marketUnit - Ignored in new architecture
+     * @param formTypeName - Ignored in new architecture  
+     * @param componentRecordModelId - Record Model ID (if already selected)
+     * @param componentFormUuid - Form UUID (if already selected)
+     * @param currentUserId - Ignored in new architecture (permissions checked via FeatureManagement)
+     */
+    public static DocFabSelectionResult selectConfiguration(String marketUnit, String formTypeName, Decimal componentRecordModelId, String componentFormUuid, Id currentUserId){
+        DocFabSelectionResult result = new DocFabSelectionResult();
+        
+        // Convert decimal to string
+        String recordModelIdStr = componentRecordModelId != null ? String.valueOf(componentRecordModelId.longValue()) : null;
+        
+        if(String.isBlank(recordModelIdStr)){
+            result.errorMessage = 'Record Model ID is required.';
+            return result;
+        }
+        
+        // Look up Record Model
+        List<DocFab_Record_Model__mdt> recordModels = [
+            SELECT Id, Record_Model_Id__c, Field_Configuration__c, Custom_Permission__c, 
+                   Page_Layout_Label__c, Icon__c, DeveloperName
+              FROM DocFab_Record_Model__mdt
+             WHERE Record_Model_Id__c = :recordModelIdStr
+             LIMIT 1
+        ];
+        
+        if(recordModels.isEmpty()){
+            result.errorMessage = 'Record Model ID ' + recordModelIdStr + ' is not configured.';
             return result;
         }
         
         DocFab_Record_Model__mdt recordModel = recordModels[0];
         
-        // Check Custom Permission
-        if(!String.isBlank(recordModel.Custom_Permission__c) && !FeatureManagement.checkPermission(recordModel.Custom_Permission__c)){
-            result.permissionError = 'You do not have access to record model ' + resolvedRecordModelId + '.';
+        // Check Custom Permission for Record Model
+        if(!hasPermission(recordModel.Custom_Permission__c)){
+            result.permissionError = 'You do not have access to record model ' + recordModelIdStr + '.';
             return result;
         }
         
-        // STEP 3: Populate result
-        result.recordModelId = Decimal.valueOf(resolvedRecordModelId);
-        result.fieldConfigurationJson = recordModel.Field_Configuration__c;
-        
-        // Form UUID priority: componentFormUuid > userOverrideFormUuid > recordModel.Default_Form_UUID__c > null
+        // If form UUID provided, validate it
         if(!String.isBlank(componentFormUuid)){
-            result.formUuid = componentFormUuid;
-        } else if(!String.isBlank(userOverrideFormUuid)){
-            result.formUuid = userOverrideFormUuid;
-        } else {
-            result.formUuid = recordModel.Default_Form_UUID__c;
+            List<DocFab_Form__mdt> forms = [
+                SELECT Id, Form_UUID__c, Custom_Permission__c
+                  FROM DocFab_Form__mdt
+                 WHERE Form_UUID__c = :componentFormUuid
+                   AND Record_Model__r.Record_Model_Id__c = :recordModelIdStr
+                 LIMIT 1
+            ];
+            
+            if(forms.isEmpty()){
+                result.errorMessage = 'Form UUID ' + componentFormUuid + ' is not configured for record model ' + recordModelIdStr + '.';
+                return result;
+            }
+            
+            // Check Custom Permission for Form
+            if(!hasPermission(forms[0].Custom_Permission__c)){
+                result.permissionError = 'You do not have access to this form.';
+                return result;
+            }
         }
         
+        result.recordModelId = componentRecordModelId;
+        result.formUuid = componentFormUuid;
+        result.fieldConfigurationJson = recordModel.Field_Configuration__c;
+        
+        return result;
+    }
+
+    /**
+     * Check if the current user has the specified custom permission.
+     * Returns true if permission is blank (no restriction) or if user has the permission.
+     */
+    private static Boolean hasPermission(String customPermissionApiName){
+        if(String.isBlank(customPermissionApiName)){
+            return false; // Custom Permission is now required
+        }
+        return FeatureManagement.checkPermission(customPermissionApiName);
+    }
+
+    /**
+     * Parse a comma-separated string into a Set of trimmed, non-empty values.
+     */
+    private static Set<String> parseCsvToSet(String csv){
+        Set<String> result = new Set<String>();
+        if(String.isBlank(csv)){
+            return result;
+        }
+        for(String part : csv.split(',')){
+            String trimmed = part.trim();
+            if(!String.isBlank(trimmed)){
+                result.add(trimmed);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Parse a comma-separated string of numbers into a Set of Decimals.
+     * Used for Form Numbers which are numeric.
+     */
+    private static Set<Decimal> parseCsvToDecimalSet(String csv){
+        Set<Decimal> result = new Set<Decimal>();
+        if(String.isBlank(csv)){
+            return result;
+        }
+        for(String part : csv.split(',')){
+            String trimmed = part.trim();
+            if(!String.isBlank(trimmed)){
+                try {
+                    result.add(Decimal.valueOf(trimmed));
+                } catch(Exception e){
+                    // Skip invalid numbers
+                }
+            }
+        }
         return result;
     }
 
@@ -138,22 +445,6 @@ public without sharing class DF_DocFabricator_Utility {
             url += '/' + formUuid;
         }
         return url;
-    }
-
-    private static Boolean userIsInCsv(String csv, Id userId){
-        if(String.isBlank(csv) || userId == null){
-            return false;
-        }
-        List<String> parts = csv.split(',');
-        for(String part : parts){
-            if(String.isBlank(part)){
-                continue;
-            }
-            if(part.trim() == String.valueOf(userId)){
-                return true;
-            }
-        }
-        return false;
     }
 
     /*

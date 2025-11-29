@@ -15,7 +15,11 @@
         <value xsi:type="xsd:string">Sweden inheritance journal (FA_SE market unit)</value>
     </values>
     <values>
-        <field>Default_Form_UUID__c</field>
+        <field>Page_Layout_Label__c</field>
+        <value xsi:type="xsd:string">Sweden Inheritance</value>
+    </values>
+    <values>
+        <field>Icon__c</field>
         <value xsi:nil="true"/>
     </values>
     <values>

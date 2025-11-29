@@ -3,6 +3,13 @@
     max-width: 90% !important;
 }
 
+/* Selection modal specific sizing */
+.slds-modal_medium .slds-modal__container {
+    width: 50% !important;
+    max-width: 600px !important;
+    min-width: 400px !important;
+}
+
 iframe {
     border: none;
 }
@@ -37,3 +44,22 @@ iframe {
 .loader-text {
     font-weight: 600;
 }
+
+/* Selection option cards */
+.selection-option {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.selection-option:hover {
+    background-color: var(--slds-c-card-color-background-hover, #f3f3f3);
+    border-color: var(--slds-c-button-brand-color-background, #0176d3);
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.selection-option:active {
+    transform: translateY(0);
+}
+

@@ -5,16 +5,28 @@ import LEAD_FIELD from '@salesforce/schema/Journal__c.Lead__c';
 
 import getJournalData_Apex from '@salesforce/apex/DFJ_JournalForm.getJournalData_Apex';
 import journalAssociatedWithLead from '@salesforce/apex/DFJ_JournalForm.journalAssociatedWithLead';
+import getAccessibleOptions from '@salesforce/apex/DF_DocFabricator_Utility.getAccessibleOptions';
+import getFormsForRecordModel from '@salesforce/apex/DF_DocFabricator_Utility.getFormsForRecordModel';
 
 export default class DFJ_JournalFormComponent extends LightningElement {
     @api recordId;
     @api objectApiName;
 
-    @api recordModelId;
-    @api formUuid;
-    @api formTypeUniqueName; // DEPRECATED - kept for backwards compatibility with existing page layouts
+    // New page layout properties for two-tier selection
+    @api recordModelIds = ''; // Comma-separated Record Model IDs (e.g., "160, 54, 22")
+    @api formNumbers = ''; // Comma-separated Form Numbers (e.g., "17, 51, 22")
+    @api buttonLabel = 'Open Journal Form'; // Customizable button label
     @api allowMultipleDocFabJournals = false;
     @api openBehavior = 'modal'; // modal | newTab | inline
+
+    // DEPRECATED: Legacy properties kept for backwards compatibility
+    // Remove these after migrating all page layouts to new architecture
+    @api recordModelId; // DEPRECATED - use recordModelIds
+    @api formUuid; // DEPRECATED - use formNumbers
+    @api formUuids; // DEPRECATED - use formNumbers  
+    @api formTypeUniqueName; // DEPRECATED - no longer used
+
+    // Internal state
     isJournalFormClicked = true;
     docFabFormUrl;
     isShowFormInModal = false;
@@ -23,8 +35,15 @@ export default class DFJ_JournalFormComponent extends LightningElement {
     relatedLeadId;
     isFetchingForm = false;
     isIframeLoading = false;
-    selectionOptions = [];
+    
+    // Two-tier selection state
     isSelectionModalOpen = false;
+    selectionStep = 'recordModel'; // 'recordModel' or 'form'
+    recordModelOptions = [];
+    formOptions = [];
+    selectedRecordModelId = null;
+    selectedFormUuid = null;
+    fieldConfigurationJson = null;
 
     get isFormLoading() {
         return this.isFetchingForm || this.isIframeLoading;
@@ -53,55 +72,139 @@ export default class DFJ_JournalFormComponent extends LightningElement {
             return;
         }
 
-        if (!this.isInitialized) {
-            this.isFetchingForm = true;
-            try {
-                await this.handleGetJournalData(true);
-            } finally {
-                this.isFetchingForm = false;
+        // If already initialized and showing, toggle visibility
+        if (this.isInitialized) {
+            const isCurrentlyVisible =
+                this.openBehavior === 'inline' ? this.isShowInline : this.isShowFormInModal;
+
+            if (isCurrentlyVisible) {
+                this.toggleVisibility();
+                return;
             }
+
+            this.isIframeLoading = true;
+            this.toggleVisibility(true);
             return;
         }
 
-        const isCurrentlyVisible =
-            this.openBehavior === 'inline' ? this.isShowInline : this.isShowFormInModal;
-
-        if (isCurrentlyVisible) {
-            this.toggleVisibility();
-            return;
+        // First click - start the selection flow
+        this.isFetchingForm = true;
+        try {
+            await this.startSelectionFlow();
+        } finally {
+            this.isFetchingForm = false;
         }
-
-        this.isIframeLoading = true;
-        this.toggleVisibility(true);
     }
 
-    get buttonLabel() {
-        if (this.isFormLoading) {
-            return 'Loading Journal Form...';
+    /**
+     * Start the two-tier selection flow by getting accessible options
+     */
+    async startSelectionFlow() {
+        try {
+            const options = await getAccessibleOptions({
+                recordModelIdsCsv: this.recordModelIds || '',
+                formNumbersCsv: this.formNumbers || ''
+            });
+
+            // Check for errors
+            if (options.errorMessage) {
+                this.showToast('Configuration Error', options.errorMessage, 'error');
+                return;
+            }
+
+            // Store the options
+            this.recordModelOptions = options.recordModels || [];
+            this.formOptions = options.forms || [];
+
+            // Determine what to show
+            if (!options.requiresRecordModelSelection && !options.requiresFormSelection) {
+                // Direct open - only one option
+                this.selectedRecordModelId = options.resolvedRecordModelId;
+                this.selectedFormUuid = options.resolvedFormUuid;
+                this.fieldConfigurationJson = options.fieldConfigurationJson;
+                await this.openJournalForm();
+            } else if (!options.requiresRecordModelSelection && options.requiresFormSelection) {
+                // Skip record model selection, show form picker
+                this.selectedRecordModelId = options.resolvedRecordModelId;
+                this.fieldConfigurationJson = options.fieldConfigurationJson;
+                this.selectionStep = 'form';
+                this.isSelectionModalOpen = true;
+            } else {
+                // Show record model picker first
+                this.selectionStep = 'recordModel';
+                this.isSelectionModalOpen = true;
+            }
+        } catch (error) {
+            const message = (error && error.body && error.body.message) || error.message || 'Unexpected error';
+            this.showToast('Error', message, 'error');
         }
-        return this.baseButtonLabel;
     }
 
-    get buttonAriaLabel() {
-        return this.buttonLabel;
-    }
+    /**
+     * Handle record model selection
+     */
+    async handleRecordModelSelect(event) {
+        const recordModelId = event.currentTarget.dataset.id;
+        if (!recordModelId) return;
 
-    get buttonIconName() {
-        return this.isFormLoading ? null : 'utility:edit_form';
-    }
+        this.selectedRecordModelId = recordModelId;
+        this.isFetchingForm = true;
 
-    get baseButtonLabel() {
-        if (this.openBehavior === 'newTab') {
-            return 'Open Journal Form';
+        try {
+            // Get forms for this record model
+            const options = await getFormsForRecordModel({
+                recordModelId: recordModelId,
+                formNumbersCsv: this.formNumbers || ''
+            });
+
+            if (options.errorMessage) {
+                this.showToast('Error', options.errorMessage, 'error');
+                this.isFetchingForm = false;
+                return;
+            }
+
+            this.formOptions = options.forms || [];
+            this.fieldConfigurationJson = options.fieldConfigurationJson;
+
+            if (!options.requiresFormSelection && options.resolvedFormUuid) {
+                // Only one form - open directly
+                this.selectedFormUuid = options.resolvedFormUuid;
+                this.isSelectionModalOpen = false;
+                await this.openJournalForm();
+            } else {
+                // Multiple forms - show form picker
+                this.selectionStep = 'form';
+            }
+        } catch (error) {
+            const message = (error && error.body && error.body.message) || error.message || 'Unexpected error';
+            this.showToast('Error', message, 'error');
+        } finally {
+            this.isFetchingForm = false;
         }
-        const isShowing = this.openBehavior === 'inline' ? this.isShowInline : this.isShowFormInModal;
-        if (!this.isInitialized) {
-            return 'Open Journal Form';
-        }
-        return isShowing ? 'Hide Journal Form' : 'Show Journal Form';
     }
 
-    async handleGetJournalData(forceShow = false) {
+    /**
+     * Handle form selection
+     */
+    async handleFormSelect(event) {
+        const formUuid = event.currentTarget.dataset.id;
+        if (!formUuid) return;
+
+        this.selectedFormUuid = formUuid;
+        this.isSelectionModalOpen = false;
+
+        this.isFetchingForm = true;
+        try {
+            await this.openJournalForm();
+        } finally {
+            this.isFetchingForm = false;
+        }
+    }
+
+    /**
+     * Open the journal form with selected record model and form
+     */
+    async openJournalForm() {
         try {
             let journalId = this.recordId;
             let leadId = this.relatedLeadId;
@@ -122,51 +225,92 @@ export default class DFJ_JournalFormComponent extends LightningElement {
                 contextRecordId: leadId,
                 objectName: this.objectApiName || 'Journal__c',
                 journlaFormClicked: this.isJournalFormClicked,
-                componentRecordModelId: this.recordModelId,
-                componentFormUuid: this.formUuid,
+                componentRecordModelId: parseFloat(this.selectedRecordModelId),
+                componentFormUuid: this.selectedFormUuid,
                 componentFormTypeName: null,
                 allowMultipleDocFabJournals: this.allowMultipleDocFabJournals,
             });
 
-            const options = (response && response.docFabOptions) || [];
-            const requiresSelection = response && response.requiresSelection;
             let docFabUrl = response && response.docFabUrl;
-
-            if (!docFabUrl && options.length === 1) {
-                docFabUrl = options[0].url;
-            }
-
-            if (requiresSelection && options.length > 1) {
-                this.selectionOptions = options;
-                this.isSelectionModalOpen = true;
-                this.isInitialized = true;
-                this.isIframeLoading = false;
-                return;
-            }
 
             if (!docFabUrl) {
                 this.showToast('Error opening journal', 'DocFab URL not available for this record.', 'error');
-                this.isShowFormInModal = false;
                 return;
             }
 
             if (this.isDocFabError(docFabUrl)) {
                 this.showToast('Error opening journal', docFabUrl, 'error');
-                this.isShowFormInModal = false;
                 return;
             }
 
-            this.selectionOptions = [];
-            this.isSelectionModalOpen = false;
             this.docFabFormUrl = docFabUrl;
             this.isInitialized = true;
             this.isIframeLoading = this.openBehavior !== 'newTab';
-            this.toggleVisibility(forceShow || this.openBehavior === 'newTab');
+            this.toggleVisibility(true);
         } catch (error) {
             const message = (error && error.body && error.body.message) || error.message || 'Unexpected error';
             this.showToast('Error opening journal', message, 'error');
-            this.isShowFormInModal = false;
         }
+    }
+
+    /**
+     * Go back from form selection to record model selection
+     */
+    handleBackToRecordModels() {
+        this.selectionStep = 'recordModel';
+        this.selectedRecordModelId = null;
+    }
+
+    get displayButtonLabel() {
+        if (this.isFormLoading) {
+            return 'Loading Journal Form...';
+        }
+        return this.computedButtonLabel;
+    }
+
+    get buttonAriaLabel() {
+        return this.displayButtonLabel;
+    }
+
+    get buttonIconName() {
+        return this.isFormLoading ? null : 'utility:edit_form';
+    }
+
+    get computedButtonLabel() {
+        const customLabel = this.buttonLabel || 'Open Journal Form';
+        
+        if (this.openBehavior === 'newTab') {
+            return customLabel;
+        }
+        const isShowing = this.openBehavior === 'inline' ? this.isShowInline : this.isShowFormInModal;
+        if (!this.isInitialized) {
+            return customLabel;
+        }
+        return isShowing ? 'Hide Journal Form' : 'Show Journal Form';
+    }
+
+    get selectionModalTitle() {
+        return this.selectionStep === 'recordModel' ? 'Select Record Model' : 'Select Form';
+    }
+
+    get showRecordModelSelection() {
+        return this.selectionStep === 'recordModel';
+    }
+
+    get showFormSelection() {
+        return this.selectionStep === 'form';
+    }
+
+    get showBackButton() {
+        return this.selectionStep === 'form' && this.recordModelOptions.length > 1;
+    }
+
+    get currentFormOptions() {
+        // Filter forms to only those for the selected record model
+        if (!this.selectedRecordModelId) {
+            return this.formOptions;
+        }
+        return this.formOptions.filter(f => f.recordModelId === this.selectedRecordModelId);
     }
 
     toggleVisibility(forceShow = false) {
@@ -199,20 +343,9 @@ export default class DFJ_JournalFormComponent extends LightningElement {
 
     handleSelectionModalClose() {
         this.isSelectionModalOpen = false;
-        this.selectionOptions = [];
-    }
-
-    handleSelectOption(event) {
-        const url = event.target.dataset.url;
-        if (!url) {
-            return;
-        }
-        this.docFabFormUrl = url;
-        this.isSelectionModalOpen = false;
-        this.selectionOptions = [];
-        this.isInitialized = true;
-        this.isIframeLoading = this.openBehavior !== 'newTab';
-        this.toggleVisibility(true);
+        this.selectionStep = 'recordModel';
+        this.selectedRecordModelId = null;
+        this.selectedFormUuid = null;
     }
 
     handleIframeLoad() {
@@ -226,8 +359,9 @@ export default class DFJ_JournalFormComponent extends LightningElement {
             'Can not open',
             'Can not create',
             'Error',
-            'Market Unit Missing',
-            'Record Model Id and Form Type cannot both be specified',
+            'is required',
+            'do not have access',
+            'not configured',
         ];
         return errorSnippets.some((snippet) => url.includes(snippet));
     }

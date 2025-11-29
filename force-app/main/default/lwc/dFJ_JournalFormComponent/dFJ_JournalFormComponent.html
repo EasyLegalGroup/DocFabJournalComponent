@@ -1,37 +1,93 @@
-<!-- DFJ Journal Form Component -->
+<!-- DFJ Journal Form Component - Two-tier permission-based selection -->
 <template>
+    <!-- Selection Modal for Record Model / Form picker -->
     <template lwc:if={isSelectionModalOpen}>
-        <section role="dialog" tabindex="-1" aria-modal="true" class="slds-modal slds-fade-in-open">
+        <section role="dialog" tabindex="-1" aria-modal="true" class="slds-modal slds-fade-in-open slds-modal_medium">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <h2 class="slds-modal__title">Choose DocFab Journal</h2>
+                    <lightning-button-icon
+                        class="slds-modal__close"
+                        icon-name="utility:close"
+                        alternative-text="Close"
+                        onclick={handleSelectionModalClose}
+                    ></lightning-button-icon>
+                    <h2 class="slds-modal__title slds-hyphenate">{selectionModalTitle}</h2>
                 </header>
                 <div class="slds-modal__content slds-p-around_medium">
-                    <template for:each={selectionOptions} for:item="option">
-                        <div key={option.url} class="slds-m-bottom_small">
-                            <lightning-button
-                                data-url={option.url}
-                                label={option.label}
-                                onclick={handleSelectOption}
-                                variant="brand"
-                                class="slds-m-bottom_xx-small"
-                            ></lightning-button>
+                    <!-- Record Model Selection -->
+                    <template lwc:if={showRecordModelSelection}>
+                        <div class="slds-grid slds-wrap slds-gutters">
+                            <template for:each={recordModelOptions} for:item="option">
+                                <div key={option.recordModelId} class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-p-around_x-small">
+                                    <div class="slds-box slds-box_link slds-theme_shade selection-option" 
+                                         data-id={option.recordModelId} 
+                                         onclick={handleRecordModelSelect}>
+                                        <div class="slds-media slds-media_center">
+                                            <div class="slds-media__figure">
+                                                <lightning-icon icon-name={option.icon} size="medium"></lightning-icon>
+                                            </div>
+                                            <div class="slds-media__body">
+                                                <h3 class="slds-text-heading_small">{option.label}</h3>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                    
+                    <!-- Form Selection -->
+                    <template lwc:if={showFormSelection}>
+                        <div class="slds-grid slds-wrap slds-gutters">
+                            <template for:each={currentFormOptions} for:item="option">
+                                <div key={option.formUuid} class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-p-around_x-small">
+                                    <div class="slds-box slds-box_link slds-theme_shade selection-option" 
+                                         data-id={option.formUuid} 
+                                         onclick={handleFormSelect}>
+                                        <div class="slds-media slds-media_center">
+                                            <div class="slds-media__figure">
+                                                <lightning-icon icon-name={option.icon} size="medium"></lightning-icon>
+                                            </div>
+                                            <div class="slds-media__body">
+                                                <h3 class="slds-text-heading_small">{option.label}</h3>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                    
+                    <!-- Loading spinner -->
+                    <template lwc:if={isFetchingForm}>
+                        <div class="slds-align_absolute-center slds-p-around_medium">
+                            <lightning-spinner alternative-text="Loading..." size="medium"></lightning-spinner>
                         </div>
                     </template>
                 </div>
-                <footer class="slds-modal__footer slds-grid slds-grid_align-end">
+                <footer class="slds-modal__footer">
+                    <template lwc:if={showBackButton}>
+                        <lightning-button 
+                            variant="neutral" 
+                            label="Back" 
+                            onclick={handleBackToRecordModels}
+                            class="slds-m-right_x-small"
+                        ></lightning-button>
+                    </template>
                     <lightning-button variant="neutral" label="Cancel" onclick={handleSelectionModalClose}></lightning-button>
                 </footer>
             </div>
         </section>
         <div class="slds-backdrop slds-backdrop_open" role="presentation"></div>
     </template>
+
+    <!-- Main button card -->
     <lightning-card>
         <div class="slds-p-vertical_small slds-p-horizontal_large">
             <div style="font-size: large">
                 <div class="journal-button-wrapper">
                     <lightning-button
-                            label={buttonLabel}
+                            label={displayButtonLabel}
                             aria-label={buttonAriaLabel}
                             onclick={handleOpenJournalFormButtonClick}
                             variant="brand"
@@ -66,6 +122,7 @@
         </template>
     </lightning-card>
 
+    <!-- DocFab iframe modal -->
     <template lwc:if={isShowFormInModal}>
         <div>
 

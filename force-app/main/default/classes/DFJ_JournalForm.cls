@@ -191,24 +191,28 @@ public with sharing class DFJ_JournalForm {
 		];
 
 		if (!journalsList.isEmpty()) {
-				// Description : Checking if market unit value is not DFJ_DK and not blank then
-				// Uses DocFab_Record_Model__mdt and DocFab_Market_Default__mdt for configuration lookup.
-				// Else getting all the data related to journal record as previously.External_record_uuid__c
-				
-				// Changes for ticket - DIN-251 : Enabled DocFab forms for all market units.
-				// Description : Checking for the is using docfab field so, for new journal docfab form could open.
-				// Start
+				// Two-tier permission-based DocFab selection:
+				// Record Model ID and Form UUID come from page layout configuration
+				// User must have Custom Permission for both to access them
 				System.debug('journlaFormClicked >>>'+journlaFormClicked + 'Is docfab URL'+journalsList[0].Is_Using_Docfab__c);
 				if(journlaFormClicked){
 					System.debug('Inside If-----');
 						Boolean shouldRollback = false;
-						String resolvedMarketUnit = resolveMarketUnit(journalsList[0], objectName, contextRecordId);
-						if(String.isBlank(resolvedMarketUnit)){
-							String objectLabel = objectName == 'Journal__c' ? 'Journal' : objectName;
-							journalReturnInstance.docFabUrl = 'Market Unit Missing on both ' + objectLabel + ' and User';
+						
+						// Validate that record model ID is provided (required in new architecture)
+						if(componentRecordModelId == null){
+							journalReturnInstance.docFabUrl = 'Record Model ID is required. Please configure the Journal Form component on the page layout.';
 							return journalReturnInstance;
 						}
-						DF_DocFabricator_Utility.DocFabSelectionResult selection = DF_DocFabricator_Utility.selectConfiguration(resolvedMarketUnit, componentFormTypeName, componentRecordModelId, componentFormUuid, UserInfo.getUserId());
+						
+						// Validate that form UUID is provided (required in new architecture)
+						if(String.isBlank(componentFormUuid)){
+							journalReturnInstance.docFabUrl = 'Form UUID is required. Please configure the Journal Form component on the page layout.';
+							return journalReturnInstance;
+						}
+						
+						// Use selectConfiguration for permission checking and field config lookup
+						DF_DocFabricator_Utility.DocFabSelectionResult selection = DF_DocFabricator_Utility.selectConfiguration(null, null, componentRecordModelId, componentFormUuid, UserInfo.getUserId());
 						if(selection == null){
 							journalReturnInstance.docFabUrl = 'No DocFab configuration found.';
 							return journalReturnInstance;
@@ -222,9 +226,12 @@ public with sharing class DFJ_JournalForm {
 							return journalReturnInstance;
 						}
 						if(selection.recordModelId == null){
-							journalReturnInstance.docFabUrl = 'No record model resolved for market unit '+ resolvedMarketUnit +'.';
+							journalReturnInstance.docFabUrl = 'Record Model ID not configured.';
 							return journalReturnInstance;
 						}
+
+						// Get market unit for the journal (still needed for the journal record itself)
+						String resolvedMarketUnit = resolveMarketUnit(journalsList[0], objectName, contextRecordId);
 
 						String docFabUrl = CheckMarketUnitToShowForm_Apex(journalsList, selection, allowMultipleDocFabJournals, resolvedMarketUnit, objectName, contextRecordId);
 						System.debug('docFabUrl If-----'+docFabUrl);
