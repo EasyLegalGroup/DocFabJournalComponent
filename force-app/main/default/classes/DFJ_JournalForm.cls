@@ -7,7 +7,7 @@ public with sharing class DFJ_JournalForm {
     // Backwards-compatible overload to satisfy older callers/tests expecting the legacy signature.
     @AuraEnabled
     public static journalWholeData getJournalData_Apex(String JournalId, String objectName, String contextRecordId, Boolean journlaFormClicked) {
-        return getJournalData_Apex(JournalId, objectName, contextRecordId, journlaFormClicked, null, null, null, false);
+        return getJournalData_Apex(JournalId, objectName, contextRecordId, journlaFormClicked, null, null, null);
     }
 
     @AuraEnabled
@@ -18,8 +18,7 @@ public with sharing class DFJ_JournalForm {
         Boolean journlaFormClicked,
         Decimal componentRecordModelId,
         String componentFormUuid,
-        String componentFormTypeName,
-        Boolean allowMultipleDocFabJournals
+        String componentFormTypeName
     ) {
 
 		if(objectName == null || objectName.trim() == ''){
@@ -233,13 +232,13 @@ public with sharing class DFJ_JournalForm {
 						// Get market unit for the journal (still needed for the journal record itself)
 						String resolvedMarketUnit = resolveMarketUnit(journalsList[0], objectName, contextRecordId);
 
-						String docFabUrl = CheckMarketUnitToShowForm_Apex(journalsList, selection, allowMultipleDocFabJournals, resolvedMarketUnit, objectName, contextRecordId);
+						String docFabUrl = processDocFabSelection(journalsList, selection, resolvedMarketUnit, objectName, contextRecordId);
 						System.debug('docFabUrl If-----'+docFabUrl);
 						if (!String.isBlank(docFabUrl)) {
 							journalReturnInstance.docFabUrl = docFabUrl;
 							System.debug('journalReturnInstance.docFabUrl---'+journalReturnInstance.docFabUrl);
-							if(objectName == 'Lead' && allowMultipleDocFabJournals){
-								journalReturnInstance.docFabOptions = buildDocFabOptionsForLead(contextRecordId, selection.recordModelId);
+							if(objectName == 'Lead'){
+								journalReturnInstance.docFabOptions = buildDocFabOptionsForLead(contextRecordId, selection.recordModelId, selection.formUuid);
 								if(journalReturnInstance.docFabOptions != null && journalReturnInstance.docFabOptions.size() > 1){
 									journalReturnInstance.requiresSelection = true;
 									// If multiple options, do not force docFabUrl to auto-open
@@ -849,12 +848,13 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 
 	// Changes for ticket - DIN-169 : Open record content in form.
 	// Start
-	// Description : checkMarketUnitToShowForm_Apex will return docFab URL using new consolidated metadata.
+	// Description : Processes DocFab selection and returns the DocFab URL.
+	// For Leads: finds existing journal by Record Model or creates new.
+	// For Journals: reuses existing DocFab record or creates new.
 	@AuraEnabled
-	public static String CheckMarketUnitToShowForm_Apex(
+	public static String processDocFabSelection(
 		List<Journal__c> journalData,
 		DF_DocFabricator_Utility.DocFabSelectionResult selection,
-		Boolean allowMultipleDocFabJournals,
 		String resolvedMarketUnit,
 		String objectName,
 		String contextRecordId
@@ -870,7 +870,7 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 			}
 
 			String targetModelId = selection.recordModelId != null ? String.valueOf(selection.recordModelId) : null;
-			if(objectName == 'Lead' && allowMultipleDocFabJournals){
+			if(objectName == 'Lead'){
 				return handleLeadDocFabFlow(selection, docFabSetting, resolvedMarketUnit, contextRecordId, targetModelId);
 			}
 
@@ -878,11 +878,9 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 			String existingRecordModelId = journalData[0].DocFab_Record_Model_ID__c;
 			Boolean modelMatchesExisting = selection.recordModelId != null && !String.isBlank(existingRecordModelId) && existingRecordModelId == targetModelId;
 
-			// Reuse existing when possible (Journal is single-doc rule; Lead multiple flag can force create).
+			// Reuse existing when possible - for non-Lead objects, always reuse if there's an existing DocFab record
 			if(!String.isBlank(externalRecordUuid)){
-				if(modelMatchesExisting || !allowMultipleDocFabJournals){
-					return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, externalRecordUuid, selection.formUuid);
-				}
+				return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, externalRecordUuid, selection.formUuid);
 			}
 
 			String recordUuidOrError = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(String.valueOf(selection.recordModelId.longValue()), journalData, selection.fieldConfigurationJson);
@@ -901,7 +899,7 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 
 			return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, recordUuidOrError, selection.formUuid);
 		} catch (Exception ex) {
-			DFJ_ErrorLogController.addErrorLogs(journalData[0].Id, 'Selecting DocFab configuration', ex.getMessage(), 'Error', 'checkMarketUnitToShowForm_Apex apex class method.', ex.getStackTraceString(), String.valueOf(ex.getLineNumber()));
+			DFJ_ErrorLogController.addErrorLogs(journalData[0].Id, 'Selecting DocFab configuration', ex.getMessage(), 'Error', 'processDocFabSelection apex class method.', ex.getStackTraceString(), String.valueOf(ex.getLineNumber()));
 			return null;
 		}
 	}
@@ -972,7 +970,7 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 
 	//Changes DIN-371 : Populating Related Journal Lookup Field
 	//Start
-    // Description : checkMarketUnitToShowForm_Apex will return Boolean for Updating Journal LookUp Field
+    // Description : Updates the Journal lookup field on related journal records
    
     public static Boolean updateLookupFieldOfJournal(List<Journal__c> journalData,String journalExternalUuid,String journalSObjectName){
 		try {
@@ -1014,7 +1012,7 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 		return null;
 	}
 
-		private static List<DocFabOption> buildDocFabOptionsForLead(String leadId, Decimal targetRecordModelId){
+		private static List<DocFabOption> buildDocFabOptionsForLead(String leadId, Decimal targetRecordModelId, String selectedFormUuid){
 			List<DocFabOption> options = new List<DocFabOption>();
 			if(String.isBlank(leadId)){
 			return options;
@@ -1037,11 +1035,8 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 				if(targetRecordModelId != null && targetRecordModelId != recordModel){
 					continue;
 				}
-				DF_DocFabricator_Utility.DocFabSelectionResult sel = DF_DocFabricator_Utility.selectConfiguration(j.Market_Unit__c, null, recordModel, null, UserInfo.getUserId());
-				if(sel != null && !String.isBlank(sel.permissionError)){
-					continue;
-				}
-				String url = DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, j.External_record_uuid__c, sel != null ? sel.formUuid : null);
+				// Use the selected form UUID directly instead of looking it up again
+				String url = DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, j.External_record_uuid__c, selectedFormUuid);
 				if(String.isBlank(url)){
 					continue;
 				}
@@ -1122,8 +1117,9 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 	//Start Changes TCS_53 Additonal Journal on account
  // Description :Creation the New record of Journal on Account
  // Changes DFJ-77 Starts Added the String orderId param to class to associate order with Journal(if selected)
+ // Updated: Added recordModelId parameter for two-tier permission-based selection
 	@AuraEnabled
-	public static List<Journal__c> journalAssociatedWithAccount(String recordId, String orderId){
+	public static List<Journal__c> journalAssociatedWithAccount(String recordId, String orderId, String recordModelId){
 		if(recordId.trim() != '' && recordId != null){
 			List<Account> listOfAccount = new List<Account>();
 			List<Journal__c> listOfJournals = new List<Journal__c>();
@@ -1135,10 +1131,14 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 				Journal__c journalInstance = new Journal__c();
 				journalInstance.Account__c = recordId;
                 //Changes DFJ-77 Starts
-                if(orderId.trim() != '' && orderId != null){
+                if(orderId != null && orderId.trim() != ''){
                     journalInstance.Order__c = orderId;
                 }
                 //End
+                // Set Record Model ID for two-tier selection
+                if(recordModelId != null && recordModelId.trim() != ''){
+                    journalInstance.DocFab_Record_Model_ID__c = recordModelId;
+                }
 				journalInstance.Market_Unit__c = listOfAccount[0].Market_Unit__c;
 				listOfJournals.add(journalInstance);
 			}

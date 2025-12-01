@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <!-- Delete new LWC component -->
+    <types>
+        <members>dFJ_JournalFormOnAccount</members>
+        <name>LightningComponentBundle</name>
+    </types>
+    
+    <!-- Delete new Custom Metadata Types -->
+    <types>
+        <members>DocFab_Record_Model__mdt</members>
+        <members>DocFab_Form__mdt</members>
+        <name>CustomObject</name>
+    </types>
+    
+    <!-- Delete new Custom Permissions - Record Models -->
+    <types>
+        <members>DocFab_Record_Model_160_DK_Inheritance</members>
+        <members>DocFab_Record_Model_218_IE_Inheritance</members>
+        <members>DocFab_Record_Model_122_SE_Inheritance</members>
+        <members>DocFab_Record_Model_63_SE_Inheritance</members>
+        <members>DocFab_Record_Model_230_DK_Pension</members>
+        <!-- Delete new Custom Permissions - Forms -->
+        <members>DocFab_Form_51_DK_Inheritance</members>
+        <members>DocFab_Form_29_DK_Inheritance</members>
+        <members>DocFab_Form_17_SE_Inheritance</members>
+        <members>DocFab_Form_11_SE_Inheritance</members>
+        <members>DocFab_Form_34_IE_Inheritance</members>
+        <members>DocFab_Form_53_DK_Pension</members>
+        <name>CustomPermission</name>
+    </types>
+    
+    <!-- Delete new Permission Sets -->
+    <types>
+        <members>DocFab_Record_Model_Form_Administrator</members>
+        <members>PS_DocFab_RM_160</members>
+        <members>PS_DocFab_RM_218</members>
+        <members>PS_DocFab_RM_122</members>
+        <members>PS_DocFab_RM_63</members>
+        <members>PS_DocFab_RM_230</members>
+        <members>PS_DocFab_Form_51</members>
+        <members>PS_DocFab_Form_29</members>
+        <members>PS_DocFab_Form_17</members>
+        <members>PS_DocFab_Form_11</members>
+        <members>PS_DocFab_Form_34</members>
+        <members>PS_DocFab_Form_53</members>
+        <name>PermissionSet</name>
+    </types>
+    
+    <!-- Delete Permission Set Group -->
+    <types>
+        <members>PSG_DocFabricator_Administrator</members>
+        <name>PermissionSetGroup</name>
+    </types>
+    
+    <version>65.0</version>
+</Package>

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <!-- Apex Classes -->
+    <types>
+        <members>DFJ_JournalForm</members>
+        <members>DFJ_JournalForm_Test</members>
+        <members>DF_DocFabricator_Utility</members>
+        <members>DF_DocFabricator_Utility_Test</members>
+        <name>ApexClass</name>
+    </types>
+    
+    <!-- Lightning Web Components -->
+    <types>
+        <members>dFJ_JournalFormComponent</members>
+        <members>dFJ_JournalFormOnAccount</members>
+        <name>LightningComponentBundle</name>
+    </types>
+    
+    <!-- Aura Components -->
+    <types>
+        <members>DFJ_JournalFormOnAccount_CMP</members>
+        <members>DF_DocFabricatorForm_CMP</members>
+        <name>AuraDefinitionBundle</name>
+    </types>
+    
+    <!-- Custom Metadata Types (Object definitions) -->
+    <types>
+        <members>DocFab_Form__mdt</members>
+        <members>DocFab_Record_Model__mdt</members>
+        <name>CustomObject</name>
+    </types>
+    
+    <!-- Custom Metadata Records -->
+    <types>
+        <members>DocFab_Form__mdt.*</members>
+        <members>DocFab_Record_Model__mdt.*</members>
+        <name>CustomMetadata</name>
+    </types>
+    
+    <!-- Custom Permissions -->
+    <types>
+        <members>DocFab_Inheritance_Denmark</members>
+        <members>DocFab_Inheritance_Ireland</members>
+        <members>DocFab_Inheritance_Sweden</members>
+        <name>CustomPermission</name>
+    </types>
+    
+    <version>65.0</version>
+</Package>

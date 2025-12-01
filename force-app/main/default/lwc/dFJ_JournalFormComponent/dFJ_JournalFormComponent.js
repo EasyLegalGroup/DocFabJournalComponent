@@ -2,10 +2,12 @@ import { api, LightningElement, wire } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { getRecord, getFieldValue } from 'lightning/uiRecordApi';
 import LEAD_FIELD from '@salesforce/schema/Journal__c.Lead__c';
+import EXTERNAL_UUID_FIELD from '@salesforce/schema/Journal__c.External_record_uuid__c';
+import DOCFAB_MODEL_ID_FIELD from '@salesforce/schema/Journal__c.DocFab_Record_Model_ID__c';
 
 import getJournalData_Apex from '@salesforce/apex/DFJ_JournalForm.getJournalData_Apex';
 import journalAssociatedWithLead from '@salesforce/apex/DFJ_JournalForm.journalAssociatedWithLead';
-import getAccessibleOptions from '@salesforce/apex/DF_DocFabricator_Utility.getAccessibleOptions';
+import getAccessibleOptionsWithContext from '@salesforce/apex/DF_DocFabricator_Utility.getAccessibleOptionsWithContext';
 import getFormsForRecordModel from '@salesforce/apex/DF_DocFabricator_Utility.getFormsForRecordModel';
 
 export default class DFJ_JournalFormComponent extends LightningElement {
@@ -16,7 +18,7 @@ export default class DFJ_JournalFormComponent extends LightningElement {
     @api recordModelIds = ''; // Comma-separated Record Model IDs (e.g., "160, 54, 22")
     @api formNumbers = ''; // Comma-separated Form Numbers (e.g., "17, 51, 22")
     @api buttonLabel = 'Open Journal Form'; // Customizable button label
-    @api allowMultipleDocFabJournals = false;
+    @api buttonIcon = ''; // Optional icon for the button (e.g., "utility:edit_form")
     @api openBehavior = 'modal'; // modal | newTab | inline
 
     // DEPRECATED: Legacy properties kept for backwards compatibility
@@ -25,6 +27,7 @@ export default class DFJ_JournalFormComponent extends LightningElement {
     @api formUuid; // DEPRECATED - use formNumbers
     @api formUuids; // DEPRECATED - use formNumbers  
     @api formTypeUniqueName; // DEPRECATED - no longer used
+    @api allowMultipleDocFabJournals; // DEPRECATED - Leads now always support multiple journals
 
     // Internal state
     isJournalFormClicked = true;
@@ -57,13 +60,19 @@ export default class DFJ_JournalFormComponent extends LightningElement {
         return this.objectApiName === 'Journal__c' ? this.recordId : null;
     }
 
+    // Journal record data (for context-aware selection)
+    journalExternalUuid;
+    journalRecordModelId;
+
     @wire(getRecord, {
         recordId: '$journalRecordId',
-        fields: [LEAD_FIELD],
+        fields: [LEAD_FIELD, EXTERNAL_UUID_FIELD, DOCFAB_MODEL_ID_FIELD],
     })
     fieldsData({ data }) {
         if (data) {
             this.relatedLeadId = getFieldValue(data, LEAD_FIELD);
+            this.journalExternalUuid = getFieldValue(data, EXTERNAL_UUID_FIELD);
+            this.journalRecordModelId = getFieldValue(data, DOCFAB_MODEL_ID_FIELD);
         }
     }
 
@@ -101,14 +110,27 @@ export default class DFJ_JournalFormComponent extends LightningElement {
      */
     async startSelectionFlow() {
         try {
-            const options = await getAccessibleOptions({
+            const options = await getAccessibleOptionsWithContext({
                 recordModelIdsCsv: this.recordModelIds || '',
-                formNumbersCsv: this.formNumbers || ''
+                formNumbersCsv: this.formNumbers || '',
+                objectApiName: this.objectApiName || 'Journal__c',
+                recordId: this.recordId,
+                existingExternalUuid: this.journalExternalUuid || '',
+                existingRecordModelId: this.journalRecordModelId || ''
             });
 
             // Check for errors
             if (options.errorMessage) {
                 this.showToast('Configuration Error', options.errorMessage, 'error');
+                return;
+            }
+
+            // Check if we have a direct open URL (existing DocFab without page layout config)
+            if (options.directOpenUrl) {
+                this.docFabFormUrl = options.directOpenUrl;
+                this.isInitialized = true;
+                this.isIframeLoading = this.openBehavior !== 'newTab';
+                this.toggleVisibility(true);
                 return;
             }
 
@@ -227,8 +249,7 @@ export default class DFJ_JournalFormComponent extends LightningElement {
                 journlaFormClicked: this.isJournalFormClicked,
                 componentRecordModelId: parseFloat(this.selectedRecordModelId),
                 componentFormUuid: this.selectedFormUuid,
-                componentFormTypeName: null,
-                allowMultipleDocFabJournals: this.allowMultipleDocFabJournals,
+                componentFormTypeName: null
             });
 
             let docFabUrl = response && response.docFabUrl;
@@ -273,7 +294,11 @@ export default class DFJ_JournalFormComponent extends LightningElement {
     }
 
     get buttonIconName() {
-        return this.isFormLoading ? null : 'utility:edit_form';
+        if (this.isFormLoading) {
+            return null;
+        }
+        // Return the configured icon, or null if none specified
+        return this.buttonIcon || null;
     }
 
     get computedButtonLabel() {
@@ -290,7 +315,17 @@ export default class DFJ_JournalFormComponent extends LightningElement {
     }
 
     get selectionModalTitle() {
-        return this.selectionStep === 'recordModel' ? 'Select Record Model' : 'Select Form';
+        return this.selectionStep === 'recordModel' ? 'Select Journal Type' : 'Select Form View';
+    }
+
+    get selectionModalSubtitle() {
+        return this.selectionStep === 'recordModel' 
+            ? 'Choose which type of journal you want to open or create'
+            : 'Choose how you want to view this journal';
+    }
+
+    get selectionModalIcon() {
+        return this.selectionStep === 'recordModel' ? 'standard:form' : 'standard:article';
     }
 
     get showRecordModelSelection() {
