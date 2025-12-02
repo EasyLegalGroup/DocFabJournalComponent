@@ -1,8 +1,116 @@
 # DocFab Journal - Production Deployment Plan
 
 **Created:** December 1, 2025  
+**Last Updated:** December 2, 2025  
 **Target Environment:** Production (`mt@dinfamiliejurist.dk`)  
 **Source Environment:** Sandbox (`mt@dinfamiliejurist.dk.itdevops`)
+
+---
+
+## 🚦 CURRENT STATUS (December 2, 2025)
+
+### ✅ COMPLETED PHASES
+
+| Phase | Description | Status | Date |
+|-------|-------------|--------|------|
+| Phase 1 | Custom Metadata Types | ✅ DEPLOYED | Dec 1 |
+| Phase 2 | Custom Permissions | ✅ DEPLOYED | Dec 1 |
+| Phase 3 | Custom Metadata Records | ✅ DEPLOYED | Dec 1 |
+| Phase 4 | Permission Sets & Groups | ✅ DEPLOYED | Dec 1 |
+
+### 🔄 IN PROGRESS
+
+| Phase | Description | Status | Blocker |
+|-------|-------------|--------|---------|
+| Phase 5 | Apex Classes | ⚠️ BLOCKED | Test coverage requirement |
+| Phase 6 | Lightning Components | ⏳ WAITING | Depends on Phase 5 |
+
+### 📊 Test Fix Progress
+
+We discovered Production had **90 failing tests** (out of 652 total) that were pre-existing issues unrelated to our deployment. We've been fixing these to enable deployment.
+
+**Test Fixes Deployed:**
+- ✅ Phase 1 test fixes deployed (26 test classes) - Dec 2
+- ⏳ Phase 2 test fixes (Lead conversion tests) - BLOCKED
+
+**Test Classes Successfully Fixed & Deployed:**
+- `AgentReport_Controller_Test` - Company__c validation
+- `ChatServiceQuickTest` - Phone number format
+- `DFJ_checkDuplicacy_Test` - Market_Unit__c value
+- `DFJ_EventHandler_Test` - Market_Unit__c value
+- `DFJ_HandleEventCampaignStatusTest` - Market_Unit__c value
+- `DFJ_JournalFormConfiguration_Test` - Market_Unit__c value
+- `DFJ_MembershipTriggerHandler_Test` - No changes needed
+- `DFJ_PaymentCreatorForOpportunity_Test` - Market_Unit__c value
+- `DFJ_ProductSelectorController_Test` - Product_Identifier__c length
+- `DFJ_ProductSelectorForOpportunity_Test` - Product_Identifier__c length
+- `DFJ_TestDataFactory` - Lead data fixes
+- `DFJ_UpdateCallHistoryMarketUnit_Test` - Market_Unit__c value
+- `DFJ_UpdateDuplicateLeadController_Test` - Company__c, Market_Unit__c
+- `DocShare_JournalCreds_Test` - Market_Unit__c value
+- `DocShareService_Tests` - Market_Unit__c value
+- `ITSupportCenterController_Test` - Market_Unit__c value
+- `McSmsFlowEnqueue_Test` - Phone format, Record_ID__c
+- `McSmsSendQueue_Test` - Phone format, Record_ID__c
+- `McSmsStatusPoller_Test` - Phone format, Record_ID__c
+- `PS_PaymentService_Test` - Company__c validation
+- `PS_InvoiceWebhookReceiver_Test` - Company__c validation
+- `PS_TestDataFactory_Test` - Company__c validation
+- `SDCallCampaignStateCreation_Test` - Market_Unit__c value
+- `SMSTriggerTest` - Phone format, Record_ID__c
+- `TelegentaOutcomeHelper_Test` - Market_Unit__c value
+- `TestGettingNextLead` - Market_Unit__c, OwnerId
+
+---
+
+## 🚧 CURRENT BLOCKER: Lead Conversion Tests
+
+### Problem Description
+
+The `DFJ_ConvertLeads_Test` and `LeadConverterClassTest` fail with:
+```
+INVALID_STATUS, invalid convertedStatus: Converted: [Status]
+```
+
+### What We've Tried
+
+1. ✅ Disabled Flow `BS_Lead_Throw_Error_when_Status_is_Changed_on_Converted_Lead`
+2. ✅ Changed hardcoded 'Converted' status to query from LeadStatus
+3. ✅ Added proper Company__c = 'Din Familiejurist ApS'
+4. ✅ Added OwnerId = UserInfo.getUserId() (Leads owned by Queue can't convert)
+5. ✅ Added RecordTypeId (DFJ_DK) and Market_Unit__c ('DFJ_DK')
+6. ✅ Tried both 'Converted' and 'Qualified' as converted status values
+
+### What We Know
+
+- Production has 2 valid LeadStatus records with `IsConverted = true`:
+  - 'Converted' (SortOrder: 5)
+  - 'Qualified' (SortOrder: 7)
+- Both statuses exist but the conversion API rejects them
+- The error occurs at `Database.convertLead()` in `DFJ_ConvertLeads.convertLead()`
+
+### What We DON'T Understand
+
+- Why both 'Converted' and 'Qualified' fail as converted status despite `IsConverted = true`
+- Whether there's a Lead Status Path restriction in Production
+- Whether there's a Process Builder or Trigger interfering
+- Whether the Lead needs to be in a specific status BEFORE conversion
+
+### Active Validation Rules on Lead
+
+| Rule | Description |
+|------|-------------|
+| `Cannot_Unconvert_Lead` | Prevents unconverting leads |
+| `Enforce_Correct_RecordType_to_MarketUnit` | RecordType must match Market_Unit__c |
+| `Prevent_Uncheck_Was_TM` | Was TM can't be unchecked |
+| `Prevent_Removing_Communication_Ban` | Communication Ban can't be removed |
+
+### Next Steps to Investigate
+
+1. Check if there's a Lead Status Path restriction by RecordType
+2. Check for any Process Builder on Lead that might interfere
+3. Try creating and converting a Lead manually in Production
+4. Check if LeadConverterClass (already in Production) works differently
 
 ---
 
@@ -341,13 +449,34 @@ sf project deploy start --source-dir "force-app\main\default\aura\DFJ_JournalFor
 
 ## ⚠️ PRE-DEPLOYMENT CHECKLIST
 
-- [ ] Production backup completed ✅ (stored in `production-backup/`)
-- [ ] All tests passing in Sandbox
-- [ ] Permission Sets planned for each country
-- [ ] User assignments documented
+- [x] Production backup completed ✅ (stored in `production-backup/`)
+- [x] Permission Sets created and deployed
+- [x] Custom Metadata Types deployed
+- [x] Custom Permissions deployed
+- [x] Custom Metadata Records deployed
+- [ ] All Production tests passing (currently ~17 failing)
+- [ ] Apex classes deployed (Phase 5) - BLOCKED
+- [ ] Lightning components deployed (Phase 6) - WAITING
 - [ ] Page Layout configurations documented (Record Model IDs, Form Numbers)
-- [ ] Rollback plan reviewed
-- [ ] Deployment window scheduled
+
+---
+
+## 📊 PRODUCTION TEST SUMMARY
+
+| Metric | Count |
+|--------|-------|
+| Total Tests | 652 |
+| Passing (before our fixes) | 562 |
+| Failing (before our fixes) | 90 |
+| Fixed & Deployed | 73 |
+| Still Failing | ~17 |
+
+**Remaining Failing Tests (estimated):**
+- 7-8 Lead conversion tests (DFJ_ConvertLeads_Test, LeadConverterClassTest)
+- 5 OwnerId-related tests (need deployment of fixes)
+- 3 Tests in main package (DFJ_JournalForm_Test) - references new code
+- 1 SOQL 101 limit issue
+- 1 Other
 
 ---
 

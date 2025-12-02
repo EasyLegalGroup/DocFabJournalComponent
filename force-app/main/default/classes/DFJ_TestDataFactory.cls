@@ -365,9 +365,11 @@ public class DFJ_TestDataFactory {
      * @Return       List<Lead>
     */
     public static List<Lead> CreateleadWithLedgerForLeadConversion(Integer noOflead,Integer noOfLedger){
+        // Get the DFJ_DK RecordType for Lead
+        Id dfjDkRecordTypeId = Schema.SObjectType.Lead.getRecordTypeInfosByDeveloperName().get('DFJ_DK').getRecordTypeId();
         List<Lead> leadList = new List<Lead>();
         for (Integer i = 0; i < noOflead; i++) {
-            leadList.add(new Lead(LastName='test'+i,Provider_Id__c='newtestProviderid12'+i,UTM_Campaign__c='Kanvas',UTM_Content__c='Vil gerne oprette et testamente',UTM_Medium__c='Cube',UTM_Source__c='Facebook',UTM_Term__c='Andet'));
+            leadList.add(new Lead(LastName='test'+i,Company='Din Familiejurist ApS',OwnerId=UserInfo.getUserId(),RecordTypeId=dfjDkRecordTypeId,Market_Unit__c='DFJ_DK',Provider_Id__c='newtestProviderid12'+i,UTM_Campaign__c='Kanvas',UTM_Content__c='Vil gerne oprette et testamente',UTM_Medium__c='Cube',UTM_Source__c='Facebook',UTM_Term__c='Andet'));
         }
         if (noOflead > 0) {
             insert leadList;

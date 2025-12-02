@@ -3,13 +3,18 @@ public class LeadConverterClassTest {
     
     @TestSetup
     static void setup() {
+        // Get the DFJ_DK RecordType for Lead
+        Id dfjDkRecordTypeId = Schema.SObjectType.Lead.getRecordTypeInfosByDeveloperName().get('DFJ_DK').getRecordTypeId();
         // Create a test Lead
         Lead testLead = new Lead(
             FirstName = 'Test',
             LastName = 'Lead',
-            Company = 'Test Company',
+            Company = 'Din Familiejurist ApS',
             Status = 'New',
-            Provider_id__c = 'lcc_test_1'
+            Provider_id__c = 'lcc_test_1',
+            OwnerId = UserInfo.getUserId(),
+            RecordTypeId = dfjDkRecordTypeId,
+            Market_Unit__c = 'DFJ_DK'
         );
         insert testLead;
     }
