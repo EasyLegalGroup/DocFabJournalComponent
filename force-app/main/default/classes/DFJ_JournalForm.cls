@@ -943,14 +943,27 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 			return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, matchingDocFab[0].External_record_uuid__c, selection.formUuid);
 		}
 
-		// No matching DocFab journal exists; create a new DocFab record first, then persist the Journal__c.
-		Journal__c newJournal = new Journal__c();
-		newJournal.Lead__c = leadId;
-		if(!String.isBlank(resolvedMarketUnit)){
-			newJournal.Market_Unit__c = resolvedMarketUnit;
+		// No matching DocFab journal exists; check if there's a blank journal we can reuse
+		// (one without External_record_uuid__c - possibly created by journalAssociatedWithLead)
+		Journal__c journalToUse = null;
+		for(Journal__c j : leadJournals){
+			if(String.isBlank(j.External_record_uuid__c) && String.isBlank(j.DocFab_Record_Model_ID__c)){
+				// Found a blank journal - reuse it instead of creating a new one
+				journalToUse = j;
+				break;
+			}
+		}
+		
+		// If no blank journal exists, create a new one
+		if(journalToUse == null){
+			journalToUse = new Journal__c();
+			journalToUse.Lead__c = leadId;
+			if(!String.isBlank(resolvedMarketUnit)){
+				journalToUse.Market_Unit__c = resolvedMarketUnit;
+			}
 		}
 
-		List<Journal__c> transientList = new List<Journal__c>{ newJournal };
+		List<Journal__c> transientList = new List<Journal__c>{ journalToUse };
 		String recordUuidOrError = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(String.valueOf(selection.recordModelId.longValue()), transientList, selection.fieldConfigurationJson);
 		if(String.isBlank(recordUuidOrError)){
 			DFJ_ErrorLogController.addErrorLogs(leadId, 'DocFab creation', '', 'Error', 'Empty DocFab response for model '+String.valueOf(selection.recordModelId), '', '');
@@ -961,9 +974,11 @@ System.debug('journalReturnInstance-->'+journalReturnInstance);
 			return recordUuidOrError;
 		}
 
-		newJournal.External_record_uuid__c = recordUuidOrError;
-		newJournal.DocFab_Record_Model_ID__c = targetModelId;
-		insert newJournal;
+		journalToUse.External_record_uuid__c = recordUuidOrError;
+		journalToUse.DocFab_Record_Model_ID__c = targetModelId;
+		
+		// Use upsert to handle both new and existing journals
+		upsert journalToUse;
 
 		return DF_DocFabricator_Utility.buildDocFabUrl(docFabSetting.URL__c, recordUuidOrError, selection.formUuid);
 	}

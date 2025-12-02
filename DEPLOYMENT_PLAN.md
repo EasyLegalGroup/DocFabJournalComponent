@@ -18,12 +18,12 @@
 | Phase 3 | Custom Metadata Records | ✅ DEPLOYED | Dec 1 |
 | Phase 4 | Permission Sets & Groups | ✅ DEPLOYED | Dec 1 |
 
-### 🔄 IN PROGRESS
+### 🚀 READY TO DEPLOY
 
-| Phase | Description | Status | Blocker |
-|-------|-------------|--------|---------|
-| Phase 5 | Apex Classes | ⚠️ BLOCKED | Test coverage requirement |
-| Phase 6 | Lightning Components | ⏳ WAITING | Depends on Phase 5 |
+| Phase | Description | Status | Action |
+|-------|-------------|--------|--------|
+| Phase 5 | Apex Classes | ✅ VALIDATED | Quick-deploy with Job ID `0AfW5000001cMq9KAE` |
+| Phase 6 | Lightning Components | ⏳ WAITING | Deploy after Phase 5 |
 
 ### 📊 Test Fix Progress
 
@@ -286,85 +286,98 @@ This deployment introduces a **two-tier permission-based DocFab selection system
 
 ---
 
-## 📁 BACKUP LOCATION
+## 📁 BACKUP LOCATIONS
 
-All current production metadata has been backed up to:
+### ⚠️ OUTDATED: Pre-Fix Backup (Dec 1)
+> **DO NOT USE FOR ROLLBACK** - This contains versions from before test fixes were deployed. Rolling back to these would re-introduce 90 failing tests.
+
 ```
-c:\Users\Mathias\DocFabJournal\production-backup\
+production-backup/   # OUTDATED - Pre-test-fix versions
+├── classes/         # Old Apex (before test fixes)
+├── lwc/             # Old LWC
+└── aura/            # Old Aura
 ```
 
-**Backup Contents:**
+### ✅ CURRENT MILESTONE: All Tests Passing (Dec 2)
+> **USE THIS FOR ROLLBACK** - This is the working state with all 690 tests passing.
+
+**Current working state locations:**
 ```
-production-backup/
-├── package.xml                          # Manifest used for retrieval
-├── classes/
-│   ├── DFJ_JournalForm.cls             # ✅ Backed up
-│   ├── DFJ_JournalForm_Test.cls        # ✅ Backed up
-│   ├── DF_DocFabricator_Utility.cls    # ✅ Backed up
-│   └── DF_DocFabricator_Utility_Test.cls # ✅ Backed up
-├── lwc/
-│   └── dFJ_JournalFormComponent/       # ✅ Backed up (4 files)
-└── aura/
-    ├── DFJ_JournalFormOnAccount_CMP/   # ✅ Backed up (9 files)
-    └── DF_DocFabricatorForm_CMP/       # ✅ Backed up (9 files)
+force-app/main/default/classes/    # New DocFab classes (Phase 5) - TO BE DEPLOYED
+temp-retrieve/classes/              # Test fix classes (8 classes) - ALREADY IN PRODUCTION ✅
 ```
+
+**Test Fix Classes in Production (temp-retrieve/):**
+- `DFJ_ConvertLeads.cls` - Dynamic convertedStatus
+- `DFJ_ConvertLeads_Test.cls` - OwnerId, 'Qualified' status
+- `DFJ_TestDataFactory.cls` - OwnerId, Company fixes
+- `DFJ_MembershipTriggerHandler_Test.cls` - Reduced to 10 records
+- `PS_InvoiceWebhookReceiver_Test.cls` - OwnerId reassignment
+- `TestGettingNextLead.cls` - Queue owner handling
+- `LeadConverterClass.cls` - OwnerId, bulkification
+- `LeadConverterClassTest.cls` - Inline lead creation
 
 **Items NOT backed up (don't exist in production):**
-- `DocFab_Record_Model__mdt` (Custom Metadata Type)
-- `DocFab_Form__mdt` (Custom Metadata Type)
-- Custom Permissions (`DocFab_Inheritance_*`)
-- `dFJ_JournalFormOnAccount` LWC
+- `dFJ_JournalFormOnAccount` LWC (NEW - will be created in Phase 6)
 
 ---
 
 ## 🔄 ROLLBACK PLAN
 
-### Scenario A: Rollback Apex Classes Only
-If issues occur with Apex logic but Custom Metadata/Permissions are fine:
+> **ROLLBACK BASELINE:** December 2, 2025 - All 690 tests passing
+> 
+> **IMPORTANT:** The Phase 5 Apex changes are **backward-compatible**. The new methods in `DF_DocFabricator_Utility` and `DFJ_JournalForm` add functionality but don't break existing behavior. Rollback is only needed if there's a compile error or critical bug.
+
+### Scenario A: Rollback Phase 5 (Apex Classes)
+If issues occur with the new DocFab Apex classes:
 
 ```powershell
-# From project root directory
-sf project deploy start --source-dir "production-backup\classes" --target-org Production --test-level RunLocalTests
+# Re-deploy the current Production versions (from validated deployment baseline)
+# The 4 DocFab classes will revert to pre-Phase-5 state
+sf project deploy start --manifest "deploy-manifest\package.xml" --target-org Production --test-level RunLocalTests
 ```
 
-### Scenario B: Rollback LWC Only
-If issues occur with the Journal Form Component UI:
+> ⚠️ **Note:** The 8 test fix classes in `temp-retrieve/` are already deployed to Production and should **NOT** be rolled back. They are working correctly and enable all 690 tests to pass.
+
+### Scenario B: Rollback Phase 6 (LWC Only)
+If issues occur with the Journal Form Component UI after Phase 6 deployment:
 
 ```powershell
-sf project deploy start --source-dir "production-backup\lwc\dFJ_JournalFormComponent" --target-org Production
+# Retrieve current production LWC first (as backup)
+sf project retrieve start --metadata "LightningComponentBundle:dFJ_JournalFormComponent" --target-org Production --output-dir rollback-temp
+
+# Then re-deploy from the milestone backup
+sf project deploy start --source-dir "milestone-backup-dec2\lwc\dFJ_JournalFormComponent" --target-org Production
 ```
 
-### Scenario C: Rollback Aura Components
-If issues occur with the Account Journal Form:
+### Scenario C: Rollback Phase 6 (Aura Components)
+If issues occur with the Account Journal Form Aura wrapper:
 
 ```powershell
-sf project deploy start --source-dir "production-backup\aura\DFJ_JournalFormOnAccount_CMP" --target-org Production
+sf project deploy start --source-dir "milestone-backup-dec2\aura\DFJ_JournalFormOnAccount_CMP" --target-org Production
 ```
 
-### Scenario D: Full Rollback (Everything)
-If major issues require complete rollback:
+### Scenario D: Delete New LWC Component
+If `dFJ_JournalFormOnAccount` (NEW) causes issues, delete it:
 
 ```powershell
-# Step 1: Restore all backed-up components
-sf project deploy start --source-dir "production-backup\classes" --target-org Production --test-level RunLocalTests
-sf project deploy start --source-dir "production-backup\lwc" --target-org Production
-sf project deploy start --source-dir "production-backup\aura" --target-org Production
-
-# Step 2: Delete new components (if they cause issues)
-# Create a destructiveChanges.xml for:
-# - dFJ_JournalFormOnAccount (LWC)
-# - DocFab_Record_Model__mdt (Custom Metadata Type)
-# - DocFab_Form__mdt (Custom Metadata Type)
-# - DocFab_Inheritance_Denmark (Custom Permission)
-# - DocFab_Inheritance_Ireland (Custom Permission)
-# - DocFab_Inheritance_Sweden (Custom Permission)
-
-# Step 3: Remove Permission Sets manually via Setup UI
+sf project deploy start --manifest "destructive\package.xml" --post-destructive-changes "destructive\destructiveChanges.xml" --target-org Production
 ```
 
-### Destructive Changes Package (for deleting new components)
-If you need to delete the new components, use this `destructiveChanges.xml`:
+### What NOT to Roll Back
 
+| Component | Why NOT to roll back |
+|-----------|---------------------|
+| Custom Metadata Types | No functional impact without Apex/LWC using them |
+| Custom Permissions | No functional impact until assigned and used |
+| Custom Metadata Records | Configuration only, no code dependency |
+| Permission Sets | Can be unassigned from users instead |
+| Test Fix Classes (8) | Already in Production, all tests depend on them |
+
+### Destructive Changes Package (for deleting new LWC only)
+If you need to delete the new `dFJ_JournalFormOnAccount` LWC component:
+
+**destructive/destructiveChanges.xml:**
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
@@ -372,20 +385,11 @@ If you need to delete the new components, use this `destructiveChanges.xml`:
         <members>dFJ_JournalFormOnAccount</members>
         <name>LightningComponentBundle</name>
     </types>
-    <types>
-        <members>DocFab_Record_Model__mdt</members>
-        <members>DocFab_Form__mdt</members>
-        <name>CustomObject</name>
-    </types>
-    <types>
-        <members>DocFab_Inheritance_Denmark</members>
-        <members>DocFab_Inheritance_Ireland</members>
-        <members>DocFab_Inheritance_Sweden</members>
-        <name>CustomPermission</name>
-    </types>
-    <version>65.0</version>
+    <version>62.0</version>
 </Package>
 ```
+
+> **Note:** Do NOT delete Custom Metadata Types, Custom Permissions, or Permission Sets. They have no functional impact and can remain in Production safely.
 
 ---
 
@@ -449,34 +453,41 @@ sf project deploy start --source-dir "force-app\main\default\aura\DFJ_JournalFor
 
 ## ⚠️ PRE-DEPLOYMENT CHECKLIST
 
-- [x] Production backup completed ✅ (stored in `production-backup/`)
+- [x] Production backup completed ✅ (stored in `production-backup/` - outdated)
 - [x] Permission Sets created and deployed
 - [x] Custom Metadata Types deployed
 - [x] Custom Permissions deployed
 - [x] Custom Metadata Records deployed
-- [ ] All Production tests passing (currently ~17 failing)
-- [ ] Apex classes deployed (Phase 5) - BLOCKED
+- [x] All Production tests passing ✅ (690/690 - Dec 2)
+- [x] Test fixes deployed ✅ (8 classes)
+- [x] Deployment validated ✅ (Job ID: `0AfW5000001cMq9KAE`)
+- [ ] Apex classes deployed (Phase 5) - READY TO QUICK-DEPLOY
 - [ ] Lightning components deployed (Phase 6) - WAITING
+- [ ] Milestone backup created (current Production state)
 - [ ] Page Layout configurations documented (Record Model IDs, Form Numbers)
 
 ---
 
 ## 📊 PRODUCTION TEST SUMMARY
 
+### ✅ MILESTONE ACHIEVED: December 2, 2025
+
 | Metric | Count |
 |--------|-------|
-| Total Tests | 652 |
-| Passing (before our fixes) | 562 |
-| Failing (before our fixes) | 90 |
-| Fixed & Deployed | 73 |
-| Still Failing | ~17 |
+| Total Tests | 690 |
+| Passing | 690 ✅ |
+| Failing | 0 |
 
-**Remaining Failing Tests (estimated):**
-- 7-8 Lead conversion tests (DFJ_ConvertLeads_Test, LeadConverterClassTest)
-- 5 OwnerId-related tests (need deployment of fixes)
-- 3 Tests in main package (DFJ_JournalForm_Test) - references new code
-- 1 SOQL 101 limit issue
-- 1 Other
+**Validated Deployment ID:** `0AfW5000001cMq9KAE`
+- Ready for quick-deploy (valid for 10 days)
+- Command: `sf project deploy quick --job-id 0AfW5000001cMq9KAE --target-org Production`
+
+### Test Fix History
+| Before Fixes | After Fixes |
+|--------------|-------------|
+| 562 passing | 690 passing |
+| 90 failing | 0 failing |
+| 8 test classes fixed & deployed |
 
 ---
 

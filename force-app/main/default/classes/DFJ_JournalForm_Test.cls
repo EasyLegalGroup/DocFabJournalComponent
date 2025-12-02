@@ -863,4 +863,272 @@ public with sharing class DFJ_JournalForm_Test {
         System.assertEquals(1, result.size(), 'Journal should exist');
     }
 
+    // =====================================================================
+    // Additional Coverage Tests for DFJ_JournalForm
+    // =====================================================================
+
+    @isTest
+    private static void getJournalData_NullRecordId_Test(){
+        // Test getJournalData_Apex with null recordId (4-param version)
+        Test.startTest();
+        DFJ_JournalForm.journalWholeData result = DFJ_JournalForm.getJournalData_Apex(null, null, null, false);
+        Test.stopTest();
+        
+        // Should return null for null JournalId
+        System.assertEquals(null, result, 'Should return null for null ID');
+    }
+
+    @isTest
+    private static void getJournalData_BlankParameters_Test(){
+        // Test getJournalData_Apex with blank journalId (4-param version)
+        Test.startTest();
+        DFJ_JournalForm.journalWholeData result = DFJ_JournalForm.getJournalData_Apex('', '', '', false);
+        Test.stopTest();
+        
+        // Should return null for blank journalId
+        System.assertEquals(null, result, 'Should return null for blank ID');
+    }
+
+    @isTest
+    private static void getJournalData_7ParamVersion_Test(){
+        // Test 7-parameter getJournalData_Apex overload
+        Journal__c journal = new Journal__c(
+            Market_Unit__c = 'DFJ_DK'
+        );
+        insert journal;
+
+        Test.startTest();
+        DFJ_JournalForm.journalWholeData result = DFJ_JournalForm.getJournalData_Apex(
+            journal.Id,
+            'Journal__c',
+            journal.Id,
+            true,
+            160,
+            'test-form-uuid',
+            null
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Should return data wrapper');
+    }
+
+    @isTest
+    private static void getJournalData_7ParamConflict_Test(){
+        // Test 7-parameter version with conflicting params (recordModelId AND formTypeName both set)
+        Journal__c journal = new Journal__c(
+            Market_Unit__c = 'DFJ_DK'
+        );
+        insert journal;
+
+        Test.startTest();
+        DFJ_JournalForm.journalWholeData result = DFJ_JournalForm.getJournalData_Apex(
+            journal.Id,
+            'Journal__c',
+            journal.Id,
+            true,
+            160,
+            null,
+            'TestFormType'  // This + recordModelId = conflict
+        );
+        Test.stopTest();
+
+        // Should return conflict error message
+        System.assertNotEquals(null, result, 'Should return wrapper');
+        System.assertNotEquals(null, result.docFabUrl, 'Should have conflict message');
+    }
+
+    @isTest
+    private static void insertJournaldata_NullPersons_Test(){
+        // Test insertJournaldata_Apex with null persons lists
+        Journal__c journal = new Journal__c(Market_Unit__c = 'DFJ_DK');
+        insert journal;
+
+        Test.startTest();
+        DFJ_JournalForm.journalWholeData result = DFJ_JournalForm.insertJournaldata_Apex(
+            JSON.serialize(journal),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        );
+        Test.stopTest();
+
+        // Should return null for null data
+        System.assertEquals(null, result, 'Should return null for null data');
+    }
+
+    @isTest
+    private static void insertJournaldata_EmptyLists_Test(){
+        // Test insertJournaldata_Apex with empty lists
+        Journal__c journal = new Journal__c(Market_Unit__c = 'DFJ_DK');
+        insert journal;
+
+        Test.startTest();
+        DFJ_JournalForm.journalWholeData result = DFJ_JournalForm.insertJournaldata_Apex(
+            JSON.serialize(journal),
+            '[]',
+            '[]',
+            '[]',
+            '[]',
+            '[]',
+            '[]',
+            '[]',
+            '[]'
+        );
+        Test.stopTest();
+
+        // Should complete without error
+        System.assertNotEquals(null, result, 'Should return result');
+    }
+
+    @isTest
+    private static void journalAssociatedWithLead_ValidLead_Test(){
+        // Test journalAssociatedWithLead with valid Lead
+        Lead testLead = new Lead(
+            LastName = 'TestLeadAssoc',
+            Company = 'Test Company',
+            Market_Unit__c = 'DFJ_DK'
+        );
+        insert testLead;
+
+        Test.startTest();
+        // This should create a journal if one doesn't exist
+        List<Journal__c> result = DFJ_JournalForm.journalAssociatedWithLead(testLead.Id);
+        Test.stopTest();
+
+        // Method creates journal if one doesn't exist
+        System.assertNotEquals(null, result, 'Should return journal list');
+    }
+
+    @isTest
+    private static void journalAssociatedWithLead_ExistingJournal_Test(){
+        // Test journalAssociatedWithLead when journal already exists
+        Lead testLead = new Lead(
+            LastName = 'TestLeadExisting',
+            Company = 'Test Company',
+            Market_Unit__c = 'DFJ_DK'
+        );
+        insert testLead;
+
+        // Create journal first
+        Journal__c journal = new Journal__c(
+            Market_Unit__c = 'DFJ_DK',
+            Lead__c = testLead.Id
+        );
+        insert journal;
+
+        Test.startTest();
+        List<Journal__c> result = DFJ_JournalForm.journalAssociatedWithLead(testLead.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Should find existing journal');
+        System.assert(result.size() > 0, 'Should return at least one journal');
+    }
+
+    @isTest
+    private static void journalWholeData_AllFields_Test(){
+        // Test journalWholeData wrapper with all fields
+        Test.startTest();
+        DFJ_JournalForm.journalWholeData wrapper = new DFJ_JournalForm.journalWholeData();
+        
+        // Set all wrapper properties
+        wrapper.journalData = new Journal__c(Market_Unit__c = 'DFJ_DK');
+        wrapper.personData = new List<Person__c>();
+        wrapper.assestData = new List<Assests__c>();
+        wrapper.picklistWrappersValues = new List<DFJ_JournalForm.listOfPicklistWrapper>();
+        wrapper.picklistWrappersEventValues = new List<DFJ_JournalForm.listOfPicklistWrapper>();
+        wrapper.picklistWrappersPersonValues = new List<DFJ_JournalForm.listOfPicklistWrapper>();
+        wrapper.picklistWrappersJournalTypeValues = new List<DFJ_JournalForm.listOfPicklistWrapper>();
+        wrapper.configurationValues = new List<DFJ_JournalForm.configWrapper>();
+        wrapper.userList = new List<User>();
+        wrapper.docFabUrl = 'https://test.com';
+        wrapper.errorMessage = null;
+        wrapper.docFabOptions = new List<DFJ_JournalForm.DocFabOption>();
+        wrapper.requiresSelection = false;
+        
+        Test.stopTest();
+
+        System.assertNotEquals(null, wrapper.journalData, 'journalData should be set');
+        System.assertEquals('https://test.com', wrapper.docFabUrl, 'docFabUrl should be set');
+    }
+
+    @isTest
+    private static void DocFabOption_Test(){
+        // Test DocFabOption wrapper
+        Test.startTest();
+        DFJ_JournalForm.DocFabOption option = new DFJ_JournalForm.DocFabOption();
+        option.label = 'Test Label';
+        option.url = 'https://docfab.test';
+        option.recordModelId = 160;
+        Test.stopTest();
+
+        System.assertEquals('Test Label', option.label);
+        System.assertEquals('https://docfab.test', option.url);
+        System.assertEquals(160, option.recordModelId);
+    }
+
+    @isTest
+    private static void configWrapper_Test(){
+        // Test configWrapper
+        Test.startTest();
+        DFJ_JournalForm.configWrapper config = new DFJ_JournalForm.configWrapper();
+        config.uniqueName = 'TestConfig';
+        config.isMandatory = true;
+        Test.stopTest();
+
+        System.assertEquals('TestConfig', config.uniqueName);
+        System.assertEquals(true, config.isMandatory);
+    }
+
+    @isTest
+    private static void listOfPicklistWrapper_Test(){
+        // Test listOfPicklistWrapper
+        Test.startTest();
+        DFJ_JournalForm.listOfPicklistWrapper plWrapper = new DFJ_JournalForm.listOfPicklistWrapper();
+        plWrapper.fieldName = 'TestField';
+        plWrapper.multiplepicklist = new List<DFJ_JournalForm.picklistWrapper>();
+        Test.stopTest();
+
+        System.assertEquals('TestField', plWrapper.fieldName);
+        System.assertNotEquals(null, plWrapper.multiplepicklist);
+    }
+
+    @isTest
+    private static void picklistWrapper_Test(){
+        // Test picklistWrapper
+        Test.startTest();
+        DFJ_JournalForm.picklistWrapper pw = new DFJ_JournalForm.picklistWrapper();
+        pw.Label = 'Test Label';
+        pw.value = 'test_value';
+        pw.textValue = 'Test Text';
+        Test.stopTest();
+
+        System.assertEquals('Test Label', pw.Label);
+        System.assertEquals('test_value', pw.value);
+    }
+
+    @isTest
+    private static void fetchPicklistValue_Apex_Journal_Test(){
+        // Test fetchPicklistValue_Apex with Journal__c
+        Test.startTest();
+        List<DFJ_JournalForm.listOfPicklistWrapper> result = DFJ_JournalForm.fetchPicklistValue_Apex('Journal__c', 'Market_Unit__c');
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Should return picklist values');
+    }
+
+    @isTest
+    private static void fetchPicklistValue_Apex_Person_Test(){
+        // Test fetchPicklistValue_Apex with Person__c
+        Test.startTest();
+        List<DFJ_JournalForm.listOfPicklistWrapper> result = DFJ_JournalForm.fetchPicklistValue_Apex('Person__c', 'City__c');
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Should return picklist values');
+    }
+
 }

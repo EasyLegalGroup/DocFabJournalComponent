@@ -20,7 +20,7 @@
     </values>
     <values>
         <field>Page_Layout_Label__c</field>
-        <value xsi:type="xsd:string">Sweden Inheritance</value>
+        <value xsi:type="xsd:string">Sweden Inheritance (Deprecated)</value>
     </values>
     <values>
         <field>Record_Model__c</field>

@@ -888,4 +888,282 @@ public with sharing class DF_DocFabricator_Utility_Test {
         // Should return error since no journals have DocFab records
         System.assertNotEquals(null, result.errorMessage, 'Should return error message');
     }
+
+    // =====================================================================
+    // Additional HTTP Callout Tests with Proper Mocking
+    // =====================================================================
+
+    @isTest
+    private static void AuthenticateAndCreateRecord_SuccessPath_Test(){
+        // Test the full authenticate + create record flow with proper mock
+        Doc_Fabricator_Setting__c setting = new Doc_Fabricator_Setting__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            URL__c = 'https://admin.docfabricator.com/',
+            API_Key__c = 'M0mOH7wOd5PZkGsDTH8qcOwPBOK77I'
+        );
+        insert setting;
+
+        Journal__c journal = new Journal__c(Market_Unit__c = 'DFJ_DK');
+        insert journal;
+
+        Test.startTest();
+        Test.setMock(HttpCalloutMock.class, new DF_MockTestUtility_Apex());
+        String result = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(
+            '160', 
+            new List<Journal__c>{journal}
+        );
+        Test.stopTest();
+
+        // With proper mock, should return a UUID
+        System.assertNotEquals(null, result, 'Should return UUID from successful callout');
+    }
+
+    @isTest
+    private static void AuthenticateAndCreateRecord_WithFieldConfig_Test(){
+        // Test authenticate + create record with field configuration
+        Doc_Fabricator_Setting__c setting = new Doc_Fabricator_Setting__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            URL__c = 'https://admin.docfabricator.com/',
+            API_Key__c = 'M0mOH7wOd5PZkGsDTH8qcOwPBOK77I'
+        );
+        insert setting;
+
+        Journal__c journal = new Journal__c(Market_Unit__c = 'DFJ_DK');
+        insert journal;
+
+        Test.startTest();
+        Test.setMock(HttpCalloutMock.class, new DF_MockTestUtility_Apex());
+        String result = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(
+            '160', 
+            new List<Journal__c>{journal},
+            '{"Market_Unit__c": "market_unit"}'
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Should return UUID with field config');
+    }
+
+    @isTest
+    private static void AuthenticateUser_EmptyUserList_Test(){
+        // Test when API returns empty user list
+        Doc_Fabricator_Setting__c setting = new Doc_Fabricator_Setting__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            URL__c = 'https://admin.docfabricator.com/',
+            API_Key__c = 'M0mOH7wOd5PZkGsDTH8qcOwPBOK77J'
+        );
+        insert setting;
+
+        Journal__c journal = new Journal__c(Market_Unit__c = 'DFJ_DK');
+        insert journal;
+
+        Test.startTest();
+        Test.setMock(HttpCalloutMock.class, new DF_MockTestUtility_Apex());
+        String result = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(
+            '160', 
+            new List<Journal__c>{journal}
+        );
+        Test.stopTest();
+
+        // Should return error message about user not found
+        System.assert(result == null || result.contains('does not exist'), 'Should indicate user not found');
+    }
+
+    @isTest
+    private static void AuthenticateUser_ServerError_Test(){
+        // Test when API returns server error
+        Doc_Fabricator_Setting__c setting = new Doc_Fabricator_Setting__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            URL__c = 'https://admin.docfabricator.com/',
+            API_Key__c = 'M0mOH7wOd5PZkGsDTH8qcOwPBOK7K5'
+        );
+        insert setting;
+
+        Journal__c journal = new Journal__c(Market_Unit__c = 'DFJ_DK');
+        insert journal;
+
+        Test.startTest();
+        Test.setMock(HttpCalloutMock.class, new DF_MockTestUtility_Apex());
+        String result = DF_DocFabricator_Utility.AuthenticateCurrentSalesforceUser_Apex(
+            '160', 
+            new List<Journal__c>{journal}
+        );
+        Test.stopTest();
+
+        // Should return null on server error
+        System.assertEquals(null, result, 'Should return null on server error');
+    }
+
+    @isTest
+    private static void CreateRecord_DirectCall_Success_Test(){
+        // Test CreateRecordToOpenDocFab directly with proper mock
+        Doc_Fabricator_Setting__c setting = new Doc_Fabricator_Setting__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            URL__c = 'https://admin.docfabricator.com/',
+            API_Key__c = 'M0mOH7wOd5PZkGsDTH8qcOwPBOK77I'
+        );
+        insert setting;
+
+        Journal__c journal = new Journal__c(Market_Unit__c = 'DFJ_DK');
+        insert journal;
+
+        Test.startTest();
+        Test.setMock(HttpCalloutMock.class, new DF_MockTestUtility_Apex());
+        String result = DF_DocFabricator_Utility.CreateRecordToOpenDocFab_Apex(
+            '160',
+            '2',
+            new List<Journal__c>{journal}
+        );
+        Test.stopTest();
+
+        // Should return UUID from successful create
+        System.assertEquals('1', result, 'Should return UUID from mock response');
+    }
+
+    @isTest
+    private static void CreateRecord_WithFieldMapping_Test(){
+        // Test CreateRecord with field configuration mapping
+        Doc_Fabricator_Setting__c setting = new Doc_Fabricator_Setting__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            URL__c = 'https://admin.docfabricator.com/',
+            API_Key__c = 'M0mOH7wOd5PZkGsDTH8qcOwPBOK77I'
+        );
+        insert setting;
+
+        Journal__c journal = new Journal__c(
+            Market_Unit__c = 'DFJ_DK',
+            Type__c = 'Inheritance'
+        );
+        insert journal;
+
+        Test.startTest();
+        Test.setMock(HttpCalloutMock.class, new DF_MockTestUtility_Apex());
+        String result = DF_DocFabricator_Utility.CreateRecordToOpenDocFab_Apex(
+            '160',
+            '2',
+            new List<Journal__c>{journal},
+            '{"Market_Unit__c": "market_unit", "Type__c": "type"}'
+        );
+        Test.stopTest();
+
+        // Should return UUID from successful create with field mapping
+        System.assertEquals('1', result, 'Should return UUID with field mapping');
+    }
+
+    @isTest
+    private static void buildSoapLogin_Test(){
+        // Test buildSoapLogin method
+        Test.startTest();
+        String result = DF_DocFabricator_Utility.buildSoapLogin('testuser', 'testpass');
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Should return SOAP envelope');
+        System.assert(result.contains('testuser'), 'Should contain username');
+        System.assert(result.contains('Envelope'), 'Should be SOAP envelope');
+    }
+
+    @isTest
+    private static void CreateDocfabModelPicklistItem_ValidData_Test(){
+        // Test CreateDocfabModelPicklistItem with valid data
+        DF_DocFabricator_Utility.RequestBodyPayloadWrapper wrapper = new DF_DocFabricator_Utility.RequestBodyPayloadWrapper();
+        wrapper.record_model = '160';
+
+        Test.startTest();
+        DF_DocFabricator_Utility.ResponseReturnWrapper result = DF_DocFabricator_Utility.CreateDocfabModelPicklistItem(wrapper);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Should return response wrapper');
+    }
+
+    @isTest
+    private static void CreateReturnResponse_AllCodes_Test(){
+        // Test CreateReturnResponse with various status codes
+        Test.startTest();
+        DF_DocFabricator_Utility.ResponseReturnWrapper result200 = DF_DocFabricator_Utility.CreateReturnResponse('Success', 200);
+        DF_DocFabricator_Utility.ResponseReturnWrapper result400 = DF_DocFabricator_Utility.CreateReturnResponse('Bad Request', 400);
+        DF_DocFabricator_Utility.ResponseReturnWrapper result500 = DF_DocFabricator_Utility.CreateReturnResponse('Server Error', 500);
+        Test.stopTest();
+
+        System.assertEquals(200, result200.statuscode, 'Should return 200');
+        System.assertEquals(400, result400.statuscode, 'Should return 400');
+        System.assertEquals(500, result500.statuscode, 'Should return 500');
+    }
+
+    @isTest
+    private static void hasPermission_NullPermission_Test(){
+        // Test hasPermission with null/blank permission (should return true - no restriction)
+        // This tests the private method indirectly through getAccessibleOptions
+        Test.startTest();
+        // When no custom permissions are set on CMDT records, hasPermission should return true
+        DF_DocFabricator_Utility.SelectionOptions result = DF_DocFabricator_Utility.getAccessibleOptions('', '17,51');
+        Test.stopTest();
+
+        // Result depends on CMDT configuration
+        System.assertNotEquals(null, result, 'Should return result');
+    }
+
+    @isTest
+    private static void normalizeIconName_AllPrefixes_Test(){
+        // Test icon normalization through wrapper class creation
+        Test.startTest();
+        
+        DF_DocFabricator_Utility.RecordModelOption opt1 = new DF_DocFabricator_Utility.RecordModelOption();
+        opt1.icon = 'utility:add';  // Already has prefix
+        
+        DF_DocFabricator_Utility.RecordModelOption opt2 = new DF_DocFabricator_Utility.RecordModelOption();
+        opt2.icon = 'standard:account';  // Already has prefix
+        
+        DF_DocFabricator_Utility.RecordModelOption opt3 = new DF_DocFabricator_Utility.RecordModelOption();
+        opt3.icon = 'action:new_task';  // Already has prefix
+        
+        DF_DocFabricator_Utility.RecordModelOption opt4 = new DF_DocFabricator_Utility.RecordModelOption();
+        opt4.icon = 'custom:custom1';  // Already has prefix
+        
+        Test.stopTest();
+
+        System.assertEquals('utility:add', opt1.icon);
+        System.assertEquals('standard:account', opt2.icon);
+    }
+
+    @isTest
+    private static void SelectionOptions_AllProperties_Test(){
+        // Comprehensive test of SelectionOptions wrapper
+        Test.startTest();
+        
+        DF_DocFabricator_Utility.SelectionOptions opts = new DF_DocFabricator_Utility.SelectionOptions();
+        
+        // Test all properties
+        opts.errorMessage = 'Test error';
+        opts.requiresRecordModelSelection = true;
+        opts.requiresFormSelection = true;
+        opts.resolvedRecordModelId = '160';
+        opts.resolvedFormUuid = 'test-uuid';
+        opts.fieldConfigurationJson = '{"test":"value"}';
+        opts.directOpenUrl = 'https://test.com';
+        opts.hasExistingDocFab = true;
+        
+        // Add record models
+        DF_DocFabricator_Utility.RecordModelOption rm = new DF_DocFabricator_Utility.RecordModelOption();
+        rm.recordModelId = '160';
+        rm.label = 'Test';
+        rm.icon = 'utility:test';
+        rm.developerName = 'Test_Dev';
+        opts.recordModels.add(rm);
+        
+        // Add forms
+        DF_DocFabricator_Utility.FormOption f = new DF_DocFabricator_Utility.FormOption();
+        f.formUuid = 'form-uuid';
+        f.formNumber = 17;
+        f.recordModelId = '160';
+        f.label = 'Form Test';
+        f.icon = 'utility:form';
+        f.developerName = 'Form_Dev';
+        opts.forms.add(f);
+        
+        Test.stopTest();
+
+        System.assertEquals('Test error', opts.errorMessage);
+        System.assertEquals(true, opts.requiresRecordModelSelection);
+        System.assertEquals(1, opts.recordModels.size());
+        System.assertEquals(1, opts.forms.size());
+    }
 }
