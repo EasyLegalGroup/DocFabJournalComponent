@@ -485,6 +485,37 @@ public without sharing class DF_DocFabricator_Utility {
             }
         }
         
+        // NEW SCENARIO: Journal with pre-set DocFab_Record_Model_ID__c
+        // → Auto-select the record model and skip record model selection modal
+        Boolean autoSelectRecordModel = false;
+        if(isJournal && !String.isBlank(existingRecordModelId)){
+            // Check if the pre-set record model exists in our configured options
+            DocFab_Record_Model__mdt presetRm = recordModelMap.get(existingRecordModelId);
+            if(presetRm == null){
+                // Record model ID is set but not configured for this page layout
+                result.errorMessage = 'The configured Record Model ID (' + existingRecordModelId + ') is not available for this page. Please contact your administrator.';
+                return result;
+            }
+            // Check if user has permission for this record model
+            if(!hasPermission(presetRm.Custom_Permission__c)){
+                result.errorMessage = 'You do not have permission to access the Record Model configured for this journal. Please contact your administrator to request access.';
+                return result;
+            }
+            // Filter accessible forms to only those matching the pre-set record model
+            List<DocFab_Form__mdt> filteredForms = new List<DocFab_Form__mdt>();
+            for(DocFab_Form__mdt f : accessibleForms){
+                if(f.Record_Model__r != null && f.Record_Model__r.Record_Model_Id__c == existingRecordModelId){
+                    filteredForms.add(f);
+                }
+            }
+            if(filteredForms.isEmpty()){
+                result.errorMessage = 'You do not have permission to access any forms for the configured Record Model. Please contact your administrator to request access.';
+                return result;
+            }
+            accessibleForms = filteredForms;
+            autoSelectRecordModel = true;
+        }
+        
         result.hasExistingDocFab = hasExistingUuid;
         
         // Build the result options
@@ -528,7 +559,20 @@ public without sharing class DF_DocFabricator_Utility {
         Integer numRecordModels = result.recordModels.size();
         Integer numForms = result.forms.size();
         
-        if(numRecordModels == 1 && numForms == 1){
+        // If auto-selecting record model (Journal with pre-set DocFab_Record_Model_ID__c),
+        // skip record model selection and only show form selection if needed
+        if(autoSelectRecordModel){
+            result.requiresRecordModelSelection = false;
+            result.resolvedRecordModelId = existingRecordModelId;
+            DocFab_Record_Model__mdt rm = accessibleRecordModels.get(existingRecordModelId);
+            result.fieldConfigurationJson = rm != null ? rm.Field_Configuration__c : null;
+            if(numForms == 1){
+                result.requiresFormSelection = false;
+                result.resolvedFormUuid = result.forms[0].formUuid;
+            } else {
+                result.requiresFormSelection = true;
+            }
+        } else if(numRecordModels == 1 && numForms == 1){
             result.requiresRecordModelSelection = false;
             result.requiresFormSelection = false;
             result.resolvedRecordModelId = result.recordModels[0].recordModelId;
