@@ -1,33 +1,23 @@
 @isTest
 public class LeadConverterClassTest {
-    
-    @TestSetup
-    static void setup() {
-        // Get the DFJ_DK RecordType for Lead
-        Id dfjDkRecordTypeId = Schema.SObjectType.Lead.getRecordTypeInfosByDeveloperName().get('DFJ_DK').getRecordTypeId();
-        // Create a test Lead
-        Lead testLead = new Lead(
-            FirstName = 'Test',
-            LastName = 'Lead',
-            Company = 'Din Familiejurist ApS',
-            Status = 'New',
-            Provider_id__c = 'lcc_test_1',
-            OwnerId = UserInfo.getUserId(),
-            RecordTypeId = dfjDkRecordTypeId,
-            Market_Unit__c = 'DFJ_DK'
-        );
-        insert testLead;
-    }
 
     @isTest
     static void testConvertLead() {
-        // Step 1: Query a valid convert status for the Lead
-        LeadStatus convertStatus = [SELECT MasterLabel FROM LeadStatus WHERE IsConverted = true LIMIT 1];
+        // Create a test Lead inline instead of using TestSetup
+        Lead testLead = new Lead(
+            FirstName = 'Test',
+            LastName = 'Lead',
+            Company = 'Test Company',
+            Status = 'New',
+            Provider_Id__c = 'test-provider-456',
+            OwnerId = UserInfo.getUserId()
+        );
+        insert testLead;
+        
+        // Query a valid convert status for the Lead - use Qualified
+        LeadStatus convertStatus = [SELECT MasterLabel FROM LeadStatus WHERE IsConverted = true AND MasterLabel = 'Qualified' LIMIT 1];
 
-        // Step 2: Get the Lead record created in @TestSetup
-        Lead testLead = [SELECT Id FROM Lead WHERE Provider_id__c = 'lcc_test_1' LIMIT 1];
-
-        // Step 3: Prepare input for the method
+        // Prepare input for the method
         LeadConverterClass.LeadConversionWrapper request = new LeadConverterClass.LeadConversionWrapper();
         request.leadId = testLead.Id;
         request.convertStatus = convertStatus.MasterLabel;
@@ -37,12 +27,12 @@ public class LeadConverterClassTest {
         List<LeadConverterClass.LeadConversionWrapper> requests = new List<LeadConverterClass.LeadConversionWrapper>();
         requests.add(request);
 
-        // Step 4: Call the method
+        // Call the method
         Test.startTest();
         List<LeadConverterClass.LeadConversionResultWrapper> results = LeadConverterClass.convertLead(requests);
         Test.stopTest();
 
-        // Step 5: Validate the results
+        // Validate the results
         System.assertEquals(1, results.size(), 'Should have one result');
         System.assert(results[0].success, 'Lead conversion should be successful');
         System.assertNotEquals(null, results[0].accountId, 'AccountId should not be null');
@@ -53,13 +43,13 @@ public class LeadConverterClassTest {
 
     @isTest
     static void testConvertLeadFailure() {
-        // Step 1: Create a dummy Lead ID that does not exist
+        // Create a dummy Lead ID that does not exist
         Id dummyLeadId = '00Q000000000000000';
 
-        // Step 2: Query a valid convert status for the Lead
-        LeadStatus convertStatus = [SELECT MasterLabel FROM LeadStatus WHERE IsConverted = true LIMIT 1];
+        // Query a valid convert status for the Lead - use Qualified
+        LeadStatus convertStatus = [SELECT MasterLabel FROM LeadStatus WHERE IsConverted = true AND MasterLabel = 'Qualified' LIMIT 1];
 
-        // Step 3: Prepare input for the method
+        // Prepare input for the method
         LeadConverterClass.LeadConversionWrapper request = new LeadConverterClass.LeadConversionWrapper();
         request.leadId = dummyLeadId;
         request.convertStatus = convertStatus.MasterLabel;
@@ -68,12 +58,12 @@ public class LeadConverterClassTest {
         List<LeadConverterClass.LeadConversionWrapper> requests = new List<LeadConverterClass.LeadConversionWrapper>();
         requests.add(request);
 
-        // Step 4: Call the method
+        // Call the method
         Test.startTest();
         List<LeadConverterClass.LeadConversionResultWrapper> results = LeadConverterClass.convertLead(requests);
         Test.stopTest();
 
-        // Step 5: Validate the results
+        // Validate the results
         System.assertEquals(1, results.size(), 'Should have one result');
         System.assert(!results[0].success, 'Lead conversion should fail');
         System.assertEquals(null, results[0].accountId, 'AccountId should be null');

@@ -1,7 +1,6 @@
 public with sharing class LeadConverterClass {
     @InvocableMethod(label='Convert Lead' description='Convert a Lead to Account, Contact, and optionally Opportunity')
     public static List<LeadConversionResultWrapper> convertLead(List<LeadConversionWrapper> requestList) {
-        List<Database.LeadConvert> leadConversions = new List<Database.LeadConvert>();
         List<LeadConversionResultWrapper> resultsList = new List<LeadConversionResultWrapper>();
 
         for (LeadConversionWrapper request : requestList) {
@@ -10,41 +9,47 @@ public with sharing class LeadConverterClass {
 
             try {
                 // Query the Lead
-                Lead lead = [SELECT Id FROM Lead WHERE Id = :request.leadId LIMIT 1];
+                Lead lead = [SELECT Id, OwnerId FROM Lead WHERE Id = :request.leadId LIMIT 1];
+                
+                // Ensure lead is owned by a User for conversion
+                if (String.valueOf(lead.OwnerId).startsWith('00G')) {
+                    lead.OwnerId = UserInfo.getUserId();
+                    update lead;
+                }
 
                 // Prepare the LeadConvert object
                 Database.LeadConvert leadConvert = new Database.LeadConvert();
                 leadConvert.setLeadId(lead.Id);
                 leadConvert.setConvertedStatus(request.convertStatus);
                 leadConvert.setDoNotCreateOpportunity(!request.createOpportunity);
+                leadConvert.setOwnerId(UserInfo.getUserId());
 
                 if (request.opportunityName != null) {
                     leadConvert.setOpportunityName(request.opportunityName);
                 }
 
-                leadConversions.add(leadConvert);
+                // Convert Lead (moved outside the accumulation issue)
+                List<Database.LeadConvert> leadConversions = new List<Database.LeadConvert>{ leadConvert };
+                List<Database.LeadConvertResult> conversionResults = Database.convertLead(leadConversions, false);
+
+                for (Database.LeadConvertResult conversionResult : conversionResults) {
+                    resultWrapper.success = conversionResult.isSuccess();
+                    resultWrapper.accountId = conversionResult.getAccountId();
+                    resultWrapper.contactId = conversionResult.getContactId();
+                    resultWrapper.opportunityId = conversionResult.getOpportunityId();
+
+                    if (!conversionResult.isSuccess()) {
+                        resultWrapper.errorMessage = conversionResult.getErrors()[0].getMessage();
+                    }
+                }
 
             } catch (QueryException e) {
                 resultWrapper.errorMessage = 'Lead not found: ' + e.getMessage();
-                resultsList.add(resultWrapper);
-                continue;
+            } catch (Exception e) {
+                resultWrapper.errorMessage = e.getMessage();
             }
-
-            // Convert Leads
-            List<Database.LeadConvertResult> conversionResults = Database.convertLead(leadConversions, false);
-
-            for (Database.LeadConvertResult conversionResult : conversionResults) {
-                resultWrapper.success = conversionResult.isSuccess();
-                resultWrapper.accountId = conversionResult.getAccountId();
-                resultWrapper.contactId = conversionResult.getContactId();
-                resultWrapper.opportunityId = conversionResult.getOpportunityId();
-
-                if (!conversionResult.isSuccess()) {
-                    resultWrapper.errorMessage = conversionResult.getErrors()[0].getMessage();
-                }
-
-                resultsList.add(resultWrapper);
-            }
+            
+            resultsList.add(resultWrapper);
         }
 
         return resultsList;

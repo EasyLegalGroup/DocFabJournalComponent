@@ -5,18 +5,14 @@
 @isTest
 private with sharing class DFJ_ConvertLeads_Test {
 
-    // Helper method to get DFJ_DK RecordTypeId
-    private static Id getDfjDkRecordTypeId() {
-        return Schema.SObjectType.Lead.getRecordTypeInfosByDeveloperName().get('DFJ_DK').getRecordTypeId();
-    }
-
     static testMethod void basicTest() {
 
-        // Create dummy lead
-        Lead testLead = new Lead(Company='Din Familiejurist ApS',FirstName='John',LastName='Doe',Provider_id__c = '1324',OwnerId=UserInfo.getUserId(),RecordTypeId=getDfjDkRecordTypeId(),Market_Unit__c='DFJ_DK');
+        // Create dummy lead with owner set
+        Lead testLead = new Lead(Company='Test Lead',FirstName='John',LastName='Doe',Provider_id__c = '1324', OwnerId=UserInfo.getUserId());
         insert testLead;
 
-        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true limit 1];
+        // Use 'Qualified' status which is a valid converted status
+        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true AND MasterLabel = 'Qualified' limit 1];
 
         // Create dummy conversion
         DFJ_ConvertLeads aLeadPlugin = new DFJ_ConvertLeads();
@@ -42,7 +38,7 @@ private with sharing class DFJ_ConvertLeads_Test {
     static testMethod void basicTestwithAccount() {
 
         // Create dummy lead
-        Lead testLead = new Lead(Company='Din Familiejurist ApS',FirstName='John',LastName='Doe',Provider_id__c = '1324',OwnerId=UserInfo.getUserId(),RecordTypeId=getDfjDkRecordTypeId(),Market_Unit__c='DFJ_DK');
+        Lead testLead = new Lead(Company='Test Lead',FirstName='John',LastName='Doe',Provider_id__c = '1324', OwnerId=UserInfo.getUserId());
         insert testLead;
 
         Payments__c testPayment = new Payments__c(Amount__c = 10,Lead__c = testLead.Id);
@@ -53,7 +49,7 @@ private with sharing class DFJ_ConvertLeads_Test {
         productInstance.productCode='1234';
         productInstance.isActive = true;
         productInstance.For_Promotion__c = true;
-        productInstance.Product_Identifier__c = 'PT1';
+        productInstance.Product_Identifier__c = 'T01';
         insert productInstance;
         
         Id pb2 = Test.getStandardPricebookId();
@@ -116,7 +112,7 @@ private with sharing class DFJ_ConvertLeads_Test {
 
         // System.debug('ACCOUNT BEFORE' + testAccount.ID);
 
-        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true limit 1];
+        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true AND MasterLabel = 'Qualified' limit 1];
 
         // Create dummy conversion
         DFJ_ConvertLeads aLeadPlugin = new DFJ_ConvertLeads();
@@ -144,7 +140,7 @@ private with sharing class DFJ_ConvertLeads_Test {
     static testMethod void basicTestwithAccounts() {
 
         // Create dummy lead
-        Lead testLead = new Lead(Company='Din Familiejurist ApS',FirstName='John',LastName='Doe',Provider_id__c = '1324',OwnerId=UserInfo.getUserId(),RecordTypeId=getDfjDkRecordTypeId(),Market_Unit__c='DFJ_DK');
+        Lead testLead = new Lead(Company='Test Lead',FirstName='John',LastName='Doe',Provider_id__c = '1324', OwnerId=UserInfo.getUserId());
         insert testLead;
 
         Account testAccount1 = new Account(name='Test Lead');
@@ -154,7 +150,7 @@ private with sharing class DFJ_ConvertLeads_Test {
 
         // System.debug('ACCOUNT BEFORE' + testAccount.ID);
 
-        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true limit 1];
+        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true AND MasterLabel = 'Qualified' limit 1];
 
         // Create dummy conversion
         DFJ_ConvertLeads aLeadPlugin = new DFJ_ConvertLeads();
@@ -181,7 +177,7 @@ private with sharing class DFJ_ConvertLeads_Test {
 
         // Create dummy lead
         //Lead testLead = new Lead(Company='Test Lead',FirstName='John',LastName='Doe');
-        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true limit 1];
+        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true AND MasterLabel = 'Qualified' limit 1];
 
         // Create dummy conversion
         DFJ_ConvertLeads aLeadPlugin = new DFJ_ConvertLeads();
@@ -227,7 +223,7 @@ private with sharing class DFJ_ConvertLeads_Test {
 
         List<Account> testAccount1 = DFJ_TestDataFactory.CreateAccounts(1);
 
-        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true limit 1];
+        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true AND MasterLabel = 'Qualified' limit 1];
 
         // Create dummy conversion
         DFJ_ConvertLeads aLeadPlugin = new DFJ_ConvertLeads();
@@ -251,7 +247,7 @@ private with sharing class DFJ_ConvertLeads_Test {
    @isTest
     public static void getMetadataMembershipTest(){
          // Create dummy lead
-        Lead testLead = new Lead(Company='Din Familiejurist ApS',FirstName='John',LastName='Doe',Provider_id__c = '1324',OwnerId=UserInfo.getUserId(),RecordTypeId=getDfjDkRecordTypeId(),Market_Unit__c='DFJ_DK');
+        Lead testLead = new Lead(Company='Test Lead',FirstName='John',LastName='Doe',Provider_id__c = '1324', OwnerId=UserInfo.getUserId());
         insert testLead;
         
        // Account testAcc = [Select Id FROM account WHERE Lead__c=: testLead.Id];
@@ -292,7 +288,7 @@ private with sharing class DFJ_ConvertLeads_Test {
         childRec.add(childInst);
         insert childRec;
 		
-        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true limit 1];
+        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true AND MasterLabel = 'Qualified' limit 1];
 
         // Create dummy conversion
         DFJ_ConvertLeads aLeadPlugin = new DFJ_ConvertLeads();
@@ -320,7 +316,7 @@ private with sharing class DFJ_ConvertLeads_Test {
     @isTest
     public static void getMetadataMembershipTest3(){
          // Create dummy lead
-        Lead testLead = new Lead(Company='Din Familiejurist ApS',FirstName='John',LastName='Doe',Provider_id__c = '1324',OwnerId=UserInfo.getUserId(),RecordTypeId=getDfjDkRecordTypeId(),Market_Unit__c='DFJ_DK');
+        Lead testLead = new Lead(Company='Test Lead',FirstName='John',LastName='Doe',Provider_id__c = '1324', OwnerId=UserInfo.getUserId());
         insert testLead;
         
        // Account testAcc = [Select Id FROM account WHERE Lead__c=: testLead.Id];
@@ -362,7 +358,7 @@ private with sharing class DFJ_ConvertLeads_Test {
         childRec.add(childInst);
         insert childRec;
 		
-        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true limit 1];
+        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true AND MasterLabel = 'Qualified' limit 1];
 
         // Create dummy conversion
         DFJ_ConvertLeads aLeadPlugin = new DFJ_ConvertLeads();
@@ -390,7 +386,7 @@ private with sharing class DFJ_ConvertLeads_Test {
   /*  @isTest
     public static void getMetadataMembershipTest2(){
          // Create dummy lead
-        Lead testLead = new Lead(Company='Test Lead',FirstName='John',LastName='Doe',Provider_id__c = '1324');
+        Lead testLead = new Lead(Company='Test Lead',FirstName='John',LastName='Doe',Provider_id__c = '1324', OwnerId=UserInfo.getUserId());
         insert testLead;
         
        // Account testAcc = [Select Id FROM account WHERE Lead__c=: testLead.Id];
@@ -422,7 +418,7 @@ private with sharing class DFJ_ConvertLeads_Test {
         personInst.person_medlem_dfj__c = true;
         insert personInst;
 		
-        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true limit 1];
+        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true AND MasterLabel = 'Qualified' limit 1];
 
         // Create dummy conversion
         DFJ_ConvertLeads aLeadPlugin = new DFJ_ConvertLeads();
@@ -448,7 +444,7 @@ private with sharing class DFJ_ConvertLeads_Test {
      @isTest
     public static void getMetadataMembershipTest4(){
          // Create dummy lead
-        Lead testLead = new Lead(Company='Din Familiejurist ApS',FirstName='John',LastName='Doe',Provider_id__c = '1324',OwnerId=UserInfo.getUserId(),RecordTypeId=getDfjDkRecordTypeId(),Market_Unit__c='DFJ_DK');
+        Lead testLead = new Lead(Company='Test Lead',FirstName='John',LastName='Doe',Provider_id__c = '1324', OwnerId=UserInfo.getUserId());
         insert testLead;
         
        // Account testAcc = [Select Id FROM account WHERE Lead__c=: testLead.Id];
@@ -490,7 +486,7 @@ private with sharing class DFJ_ConvertLeads_Test {
         childRec.add(childInst);
         insert childRec;
 		
-        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true limit 1];
+        LeadStatus convertStatus = [Select Id, MasterLabel from LeadStatus where IsConverted=true AND MasterLabel = 'Qualified' limit 1];
 
         // Create dummy conversion
         DFJ_ConvertLeads aLeadPlugin = new DFJ_ConvertLeads();

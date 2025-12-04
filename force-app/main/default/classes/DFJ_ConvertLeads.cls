@@ -141,9 +141,12 @@ global class DFJ_ConvertLeads implements Process.Plugin {
             lc.setLeadId(leadID);
             lc.setOverwriteLeadSource(overWriteLeadSource);
             lc.setDoNotCreateOpportunity(!createOpportunity);
-            // Query for any valid converted status
-            LeadStatus convertStatus = [SELECT MasterLabel FROM LeadStatus WHERE IsConverted = true LIMIT 1];
-            lc.setConvertedStatus(convertStatus.MasterLabel);
+            // Use passed convertedStatus parameter, fallback to querying for valid status
+            if (String.isBlank(convertedStatus)) {
+                LeadStatus defaultStatus = [SELECT MasterLabel FROM LeadStatus WHERE IsConverted = true LIMIT 1];
+                convertedStatus = defaultStatus.MasterLabel;
+            }
+            lc.setConvertedStatus(convertedStatus);
             if (sendEmailToOwner != null) lc.setSendNotificationEmail(sendEmailToOwner);
             if (accountId != null && accountId.length() > 0) lc.setAccountId(accountId);
             if (contactId != null && contactId.length() > 0) lc.setContactId(contactId);
